@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GeoTracker & Alarm</title>
+    <title>GeoTracker Pro MVP</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -12,6 +12,15 @@
         body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         #map { height: 100vh; width: 100vw; z-index: 1; }
         
+        /* Search Bar */
+        #search-box {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            z-index: 1000; width: 90%; max-width: 400px; display: flex; gap: 5px;
+        }
+        #search-input { flex-grow: 1; padding: 12px; border: none; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); font-size: 14px; }
+        #search-btn { background: #007bff; color: white; border: none; padding: 0 15px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+
+        /* Bottom UI Panel */
         #ui-panel {
             position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%);
             background: white; padding: 15px; border-radius: 12px;
@@ -23,7 +32,7 @@
         .data-value { font-weight: bold; color: #007bff; }
         #status-text { font-size: 12px; color: #666; margin-bottom: 8px; min-height: 15px; font-style: italic; }
 
-        /* Alarm Dashboard */
+        /* Alarm Panel */
         #alarm-panel {
             background: #fff3cd; border: 1px solid #ffeeba; padding: 10px; 
             border-radius: 8px; margin-bottom: 10px; display: none;
@@ -32,22 +41,42 @@
 
         button {
             width: 100%; padding: 10px; margin-top: 6px; border: none;
-            border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer;
+            border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer;
         }
         .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-success:disabled { background: #88cfa6; cursor: not-allowed; }
         .btn-warning { background: #ffc107; color: #333; }
         .btn-danger { background: #dc3545; color: white; }
         .btn-secondary { background: #6c757d; color: white; }
 
-        /* Overlay for map instructions */
         #map-instruction {
-            display: none; position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            display: none; position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
             background: rgba(0,0,0,0.8); color: white; padding: 10px 20px;
-            border-radius: 20px; z-index: 2000; font-weight: bold; pointer-events: none;
+            border-radius: 20px; z-index: 2000; font-weight: bold; pointer-events: none; text-align: center;
         }
+
+        /* History Modal */
+        #history-modal {
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 3000; overflow-y: auto;
+        }
+        .modal-content {
+            background: white; margin: 20px auto; padding: 20px; width: 90%; max-width: 600px; border-radius: 12px;
+        }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; }
+        th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .action-btn { border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; color: white; font-size: 11px; margin-bottom: 2px; width: 100%;}
+        .bg-red { background: #dc3545; } .bg-blue { background: #007bff; }
     </style>
 </head>
 <body>
+
+    <div id="search-box">
+        <input type="text" id="search-input" placeholder="Search for a place...">
+        <button id="search-btn" onclick="searchLocation()">Search</button>
+    </div>
 
     <div id="map"></div>
     <div id="map-instruction">Tap on the map to set destination</div>
@@ -67,106 +96,223 @@
         </div>
         
         <button class="btn-primary" id="btn-toggle-track" onclick="toggleTracking()">1. Start Live Tracking</button>
-        <button class="btn-warning" id="btn-set-alarm" onclick="activateAlarmMode()" disabled>2. Set Destination Alarm</button>
+        <button class="btn-warning" id="btn-set-alarm" onclick="activateAlarmMode()">2. Set Destination Alarm</button>
+        <div style="display: flex; gap: 5px;">
+            <button class="btn-success" id="btn-save" onclick="saveCurrentLocation()" disabled>Pin Location</button>
+            <button class="btn-secondary" onclick="openHistory()">History</button>
+        </div>
+    </div>
+
+    <div id="history-modal">
+        <div class="modal-content">
+            <h2 style="margin-top:0;">Saved Locations</h2>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead><tr><th>Time</th><th>Location</th><th>Remark</th><th>Actions</th></tr></thead>
+                    <tbody id="history-body"></tbody>
+                </table>
+            </div>
+            <br>
+            <button class="btn-success" onclick="exportCSV()">Download CSV</button>
+            <button class="btn-secondary" onclick="closeHistory()">Close</button>
+        </div>
     </div>
 
     <script>
-        let map, userMarker, destinationMarker, watchId = null;
+        // --- Core Variables ---
+        let map, userMarker, destinationMarker, searchMarker, watchId = null, wakeLock = null, audioCtx = null;
         let currentPos = null;
-        let wakeLock = null;
-        
-        // Alarm State
+        let historyData = JSON.parse(localStorage.getItem('geoHistory')) || [];
         let alarmState = { active: false, lat: null, lng: null, radius: 1000, triggered: false };
-        let audioCtx = null; // Used for the beep
 
-        // Init Map
+        // --- Init Map ---
         map = L.map('map').setView([20, 0], 2);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        renderSavedPins();
 
-        // --- 1. Map Click Event (For setting the destination) ---
+        // --- Search Logic (OpenStreetMap Nominatim API) ---
+        async function searchLocation() {
+            const query = document.getElementById('search-input').value;
+            if (!query) return;
+            
+            document.getElementById('search-btn').innerText = "...";
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+                const data = await res.json();
+                
+                if (data && data.length > 0) {
+                    const lat = parseFloat(data[0].lat);
+                    const lon = parseFloat(data[0].lon);
+                    
+                    map.flyTo([lat, lon], 14);
+                    
+                    if (searchMarker) map.removeLayer(searchMarker);
+                    searchMarker = L.marker([lat, lon]).addTo(map).bindPopup(data[0].display_name).openPopup();
+                } else {
+                    alert("Location not found.");
+                }
+            } catch (err) {
+                alert("Search failed. Check connection.");
+            }
+            document.getElementById('search-btn').innerText = "Search";
+        }
+
+        // --- Map Click (For setting alarm destination) ---
         map.on('click', function(e) {
             if (document.getElementById('map-instruction').style.display === 'block') {
                 const radiusInput = prompt("Enter alarm radius in meters (e.g., 500, 1000):", "1000");
                 if (!radiusInput || isNaN(radiusInput)) return alert("Invalid radius.");
 
-                // Set Alarm Data
                 alarmState.lat = e.latlng.lat;
                 alarmState.lng = e.latlng.lng;
                 alarmState.radius = parseInt(radiusInput);
                 alarmState.active = true;
                 alarmState.triggered = false;
 
-                // Draw Destination Pin & Circle
                 if (destinationMarker) map.removeLayer(destinationMarker);
                 destinationMarker = L.circle([alarmState.lat, alarmState.lng], {
                     color: 'red', fillColor: '#f03', fillOpacity: 0.2, radius: alarmState.radius
                 }).addTo(map).bindPopup("Alarm Destination").openPopup();
 
-                // Update UI
                 document.getElementById('map-instruction').style.display = 'none';
                 document.getElementById('btn-set-alarm').style.display = 'none';
                 document.getElementById('alarm-panel').style.display = 'block';
                 document.getElementById('ui-radius').innerText = alarmState.radius;
                 
-                // Initialize Audio Context on user interaction (Browser security requirement)
                 if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                
-                checkAlarmCondition(); // Check immediately
+                checkAlarmCondition(); 
             }
         });
 
-        // --- 2. Live Tracking ---
+        // --- Live Tracking & Wake Lock ---
         async function toggleTracking() {
             const btn = document.getElementById('btn-toggle-track');
             const statusText = document.getElementById('status-text');
             
             if (watchId) {
-                // Stop Tracking
                 navigator.geolocation.clearWatch(watchId);
                 watchId = null;
                 btn.innerText = "1. Start Live Tracking";
                 btn.style.background = "#007bff";
-                document.getElementById('btn-set-alarm').disabled = true;
+                document.getElementById('btn-save').disabled = true;
                 statusText.innerText = "Tracking stopped.";
                 releaseWakeLock();
             } else {
-                // Start Tracking
                 if (!navigator.geolocation) return alert("Geolocation not supported.");
                 
                 btn.innerText = "Stop Tracking";
                 btn.style.background = "#dc3545"; 
                 statusText.innerText = "Acquiring signal...";
-                document.getElementById('btn-set-alarm').disabled = false;
-
-                requestWakeLock(); // Try to keep screen on
+                
+                requestWakeLock();
 
                 watchId = navigator.geolocation.watchPosition(
                     (position) => {
-                        statusText.innerText = `Tracking active (Accuracy: ±${Math.round(position.coords.accuracy)}m)`;
+                        statusText.innerText = `Tracking active (±${Math.round(position.coords.accuracy)}m)`;
+                        document.getElementById('btn-save').disabled = false;
                         
-                        currentPos = { lat: position.coords.latitude, lng: position.coords.longitude };
+                        currentPos = { 
+                            lat: position.coords.latitude, 
+                            lng: position.coords.longitude,
+                            alt: position.coords.altitude ? Math.round(position.coords.altitude) : 'N/A',
+                            acc: Math.round(position.coords.accuracy),
+                            time: new Date().toISOString()
+                        };
 
                         document.getElementById('ui-lat').innerText = currentPos.lat.toFixed(5);
                         document.getElementById('ui-lng').innerText = currentPos.lng.toFixed(5);
 
                         const latLng = [currentPos.lat, currentPos.lng];
                         if (!userMarker) {
-                            userMarker = L.marker(latLng).addTo(map).bindPopup("You").openPopup();
+                            userMarker = L.marker(latLng).addTo(map).bindPopup("Live Location").openPopup();
                             map.setView(latLng, 15);
                         } else {
                             userMarker.setLatLng(latLng);
                         }
 
-                        // Check alarm every time we move
                         if (alarmState.active) checkAlarmCondition();
                     },
                     (err) => statusText.innerText = "Error: " + err.message,
-                    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+                    { enableHighAccuracy: false, maximumAge: 10000, timeout: 15000 }
                 );
             }
         }
 
-        // --- 3. Alarm Logic & Distance Math ---
+        // --- Saving & History Logic ---
+        function saveCurrentLocation() {
+            if (!currentPos) return;
+            const remark = prompt("Enter a remark for this location:");
+            if (remark === null) return;
+
+            const record = { id: Date.now().toString(), ...currentPos, remark: remark || "No remark" };
+            historyData.push(record);
+            localStorage.setItem('geoHistory', JSON.stringify(historyData));
+            addPinToMap(record);
+            alert("Location Pinned!");
+        }
+
+        function addPinToMap(record) {
+            L.marker([record.lat, record.lng]).addTo(map).bindPopup(`<b>${record.remark}</b><br>${record.lat.toFixed(4)}, ${record.lng.toFixed(4)}`);
+        }
+
+        function renderSavedPins() { historyData.forEach(addPinToMap); }
+
+        function openHistory() {
+            const tbody = document.getElementById('history-body');
+            tbody.innerHTML = '';
+            
+            [...historyData].reverse().forEach(record => {
+                const date = new Date(record.time).toLocaleString(undefined, {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+                // Generate Google Maps URL
+                const gMapsUrl = `https://www.google.com/maps/search/?api=1&query=${record.lat},${record.lng}`;
+                
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${date}</td>
+                        <td>${record.lat.toFixed(4)},<br>${record.lng.toFixed(4)}</td>
+                        <td>${record.remark}</td>
+                        <td>
+                            <button class="action-btn bg-blue" onclick="shareLink('${gMapsUrl}')">Share</button>
+                            <button class="action-btn bg-red" onclick="deleteRecord('${record.id}')">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            document.getElementById('history-modal').style.display = 'block';
+        }
+
+        function closeHistory() { document.getElementById('history-modal').style.display = 'none'; }
+
+        function deleteRecord(id) {
+            if(confirm("Delete this saved location?")) {
+                historyData = historyData.filter(r => r.id !== id);
+                localStorage.setItem('geoHistory', JSON.stringify(historyData));
+                openHistory();
+            }
+        }
+
+        function shareLink(url) {
+            navigator.clipboard.writeText(url).then(() => {
+                alert("Google Maps link copied to clipboard!\n\n" + url);
+            }).catch(err => {
+                prompt("Copy this link manually:", url);
+            });
+        }
+
+        function exportCSV() {
+            if (historyData.length === 0) return alert("No data to export.");
+            let csvContent = "data:text/csv;charset=utf-8,Timestamp,Latitude,Longitude,Altitude,Accuracy(m),Remark\n";
+            historyData.forEach(row => {
+                const safeRemark = `"${row.remark.replace(/"/g, '""')}"`;
+                csvContent += `${row.time},${row.lat},${row.lng},${row.alt},${row.acc},${safeRemark}\n`;
+            });
+            const link = document.createElement("a");
+            link.href = encodeURI(csvContent);
+            link.download = `GeoData_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+        }
+
+        // --- Alarm Logic & Utilities ---
         function activateAlarmMode() {
             document.getElementById('map-instruction').style.display = 'block';
             alert("Tap anywhere on the map to set your destination.");
@@ -181,14 +327,9 @@
 
         function checkAlarmCondition() {
             if (!currentPos || !alarmState.lat) return;
-
-            // Calculate distance in meters
             const distance = haversineDistance(currentPos.lat, currentPos.lng, alarmState.lat, alarmState.lng);
-            
-            // Update UI
             document.getElementById('distance-text').innerText = Math.round(distance) + " meters away";
 
-            // Trigger Alarm
             if (distance <= alarmState.radius && !alarmState.triggered) {
                 alarmState.triggered = true;
                 document.getElementById('distance-text').innerText = "ARRIVED!";
@@ -198,58 +339,33 @@
             }
         }
 
-        // The Haversine Formula (Calculates distance over the earth's curve)
         function haversineDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371e3; // Earth radius in meters
-            const φ1 = lat1 * Math.PI/180;
-            const φ2 = lat2 * Math.PI/180;
-            const Δφ = (lat2-lat1) * Math.PI/180;
-            const Δλ = (lon2-lon1) * Math.PI/180;
-
-            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                      Math.cos(φ1) * Math.cos(φ2) *
-                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return R * c; // Distance in meters
+            const R = 6371e3; 
+            const φ1 = lat1 * Math.PI/180, φ2 = lat2 * Math.PI/180;
+            const Δφ = (lat2-lat1) * Math.PI/180, Δλ = (lon2-lon1) * Math.PI/180;
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))); 
         }
 
-        // --- 4. System Utilities (Audio & Screen Lock) ---
         function playLoudBeep() {
             if (!audioCtx) return;
-            
-            // Generate 5 fast, loud beeps
             for (let i = 0; i < 5; i++) {
                 setTimeout(() => {
-                    const oscillator = audioCtx.createOscillator();
-                    const gainNode = audioCtx.createGain();
-                    
-                    oscillator.type = 'square'; // Harsh, loud sound
-                    oscillator.frequency.value = 800; // 800Hz
-                    
-                    oscillator.connect(gainNode);
-                    gainNode.connect(audioCtx.destination);
-                    
-                    oscillator.start();
-                    gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
-                    oscillator.stop(audioCtx.currentTime + 0.5);
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'square'; osc.frequency.value = 800;
+                    osc.connect(gain); gain.connect(audioCtx.destination);
+                    osc.start(); gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.5);
+                    osc.stop(audioCtx.currentTime + 0.5);
                 }, i * 600);
             }
         }
 
         async function requestWakeLock() {
-            try {
-                if ('wakeLock' in navigator) {
-                    wakeLock = await navigator.wakeLock.request('screen');
-                    console.log('Screen Wake Lock active');
-                }
-            } catch (err) { console.error(`${err.name}, ${err.message}`); }
+            try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } 
+            catch (err) { console.error("Wake Lock failed:", err); }
         }
-
-        function releaseWakeLock() {
-            if (wakeLock !== null) {
-                wakeLock.release().then(() => wakeLock = null);
-            }
-        }
+        function releaseWakeLock() { if (wakeLock) wakeLock.release().then(() => wakeLock = null); }
     </script>
 </body>
 </html>
