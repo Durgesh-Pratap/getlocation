@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LingoCalc Pro - Searchable</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; display: flex; justify-content: center; padding: 20px; }
+        .container { width: 95%; max-width: 900px; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .main-layout { display: grid; grid-template-columns: 1fr 300px; gap: 25px; margin-bottom: 30px; }
+        
+        /* Input & Controls */
+        textarea { width: 100%; height: 180px; padding: 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; outline: none; box-sizing: border-box; }
+        .tag-select, .search-input { padding: 12px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 15px; width: 100%; box-sizing: border-box; }
+        .search-input { border: 2px solid #3498db; background: #f0f7ff; font-size: 1.1em; }
+
+        /* Badges */
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.75em; color: white; font-weight: bold; text-transform: uppercase; margin-bottom: 5px;}
+        .cat-business { background: #4a90e2; }
+        .cat-personal { background: #9b59b6; }
+        .cat-medical { background: #e74c3c; }
+        .cat-other { background: #95a5a6; }
+
+        /* History & Results */
+        .results-panel { background: #f8fafc; border-radius: 10px; padding: 20px; border: 1px solid #edf2f7; text-align: right; }
+        .history-item { border-left: 6px solid #ccc; background: #fff; padding: 15px; margin-bottom: 15px; border-radius: 0 10px 10px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: 0.2s; }
+        .history-item:hover { transform: translateX(5px); }
+        .btn { padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; width: 100%; }
+        .btn-save { background: #2ecc71; color: white; font-size: 1em; }
+        .highlight { background: yellow; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 style="margin-top:0">LingoCalc <small style="color:#999">Pro</small></h2>
+    
+    <div class="main-layout">
+        <div>
+            <select id="category-pick" class="tag-select">
+                <option value="business">Business / Startup</option>
+                <option value="personal">Personal / Home</option>
+                <option value="medical">Medical / Lab</option>
+                <option value="other">General</option>
+            </select>
+            <textarea id="input" placeholder="Type: 10 units at 500 each + 18% tax"></textarea>
+            <button class="btn btn-save" onclick="saveRecord()" style="margin-top:10px">Save to History</button>
+        </div>
+
+        <div class="results-panel">
+            <div id="results-display" style="min-height: 100px; font-family: monospace; color: #555;"></div>
+            <hr>
+            <div style="font-size: 1.5em; font-weight: bold; color: #2c3e50;">Total: ₹<span id="grand-total">0</span></div>
+        </div>
+    </div>
+
+    <div style="border-top: 2px solid #eee; padding-top: 20px;">
+        <h3>Search Records</h3>
+        <input type="text" id="search-bar" class="search-input" placeholder="🔍 Search by category or keyword (e.g. 'office', 'medical')..." oninput="renderHistory()">
+        <div id="history-list"></div>
+    </div>
+</div>
+
+<script>
+    const inputArea = document.getElementById('input');
+    const categoryPick = document.getElementById('category-pick');
+    const resultsDisplay = document.getElementById('results-display');
+    const grandTotalSpan = document.getElementById('grand-total');
+    const historyList = document.getElementById('history-list');
+    const searchBar = document.getElementById('search-bar');
+
+    inputArea.addEventListener('input', updateCalc);
+
+    function updateCalc() {
+        const lines = inputArea.value.split('\n');
+        let total = 0;
+        let html = "";
+        
+        lines.forEach(line => {
+            const val = parseMath(line);
+            total += val;
+            html += `<div style="margin-bottom:2px">${val > 0 ? '₹'+val.toLocaleString() : '-'}</div>`;
+        });
+        
+        resultsDisplay.innerHTML = html;
+        grandTotalSpan.innerText = total.toLocaleString();
+    }
+
+    function parseMath(str) {
+        let clean = str.toLowerCase()
+            .replace(/at|each|times/g, '*')
+            .replace(/plus|and/g, '+')
+            .replace(/minus|less/g, '-')
+            .replace(/%/g, '/100*') // Basic percentage support
+            .replace(/[^0-9+\-*/().]/g, '');
+        try { return eval(clean) || 0; } catch { return 0; }
+    }
+
+    function saveRecord() {
+        if (!inputArea.value.trim()) return;
+        const entry = {
+            category: categoryPick.value,
+            text: inputArea.value,
+            total: grandTotalSpan.innerText,
+            date: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+        };
+        
+        let logs = JSON.parse(localStorage.getItem('lingo_pro_logs') || '[]');
+        logs.unshift(entry);
+        localStorage.setItem('lingo_pro_logs', JSON.stringify(logs));
+        
+        inputArea.value = "";
+        updateCalc();
+        renderHistory();
+    }
+
+    function renderHistory() {
+        let logs = JSON.parse(localStorage.getItem('lingo_pro_logs') || '[]');
+        const searchTerm = searchBar.value.toLowerCase();
+
+        // Filter logic
+        const filtered = logs.filter(item => 
+            item.text.toLowerCase().includes(searchTerm) || 
+            item.category.toLowerCase().includes(searchTerm)
+        );
+
+        historyList.innerHTML = filtered.map(item => `
+            <div class="history-item" style="border-color: ${getCatColor(item.category)}">
+                <span class="badge cat-${item.category}">${item.category}</span>
+                <span style="float:right; font-size:0.85em; color:#888">${item.date}</span>
+                <p style="margin: 10px 0; font-size: 1.05em; line-height: 1.4;">${item.text.replace(/\n/g, '<br>')}</p>
+                <div style="font-weight: bold; color: #2c3e50; border-top: 1px dashed #eee; padding-top: 8px;">
+                    Amount Saved: ₹${item.total}
+                </div>
+            </div>
+        `).join('');
+
+        if(filtered.length === 0 && searchTerm !== "") {
+            historyList.innerHTML = "<p style='color:#999; text-align:center;'>No records found matching your search.</p>";
+        }
+    }
+
+    function getCatColor(cat) {
+        const colors = { business: '#4a90e2', personal: '#9b59b6', medical: '#e74c3c', other: '#95a5a6' };
+        return colors[cat] || '#95a5a6';
+    }
+
+    // Initialize
+    renderHistory();
+</script>
+</body>
+</html>
