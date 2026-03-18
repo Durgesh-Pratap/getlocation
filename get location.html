@@ -1,267 +1,259 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Geo Tracker Pro</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<title>Geo Alert Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
-  <style>
-    body { margin: 0; font-family: Arial; }
-    #map { height: 55vh; }
-    .controls { padding: 10px; background: #f4f4f4; }
-    input, button { margin: 5px; padding: 6px; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    td, th { border: 1px solid #ccc; padding: 5px; }
-  </style>
+<style>
+body { margin:0; font-family: Arial; }
+#map { height: 55vh; }
+.controls { padding:10px; background:#f4f4f4; }
+input, button { margin:5px; padding:6px; }
+#coords { font-weight:bold; margin-top:10px; }
+</style>
 </head>
 
 <body>
 
 <div class="controls">
 
-  <label>
-    <input type="checkbox" id="toggleLocation" onchange="toggleTracking(this)">
-    Enable Current Location
-  </label>
+<label>
+<input type="checkbox" onchange="toggleTracking(this)"> Enable Tracking
+</label>
 
-  <label>
-    <input type="checkbox" id="routeToggle" onchange="toggleRoute(this)">
-    Enable Route Tracking
-  </label>
+<label>
+<input type="checkbox" onchange="toggleRoute(this)"> Route Tracking
+</label>
 
-  <br>
+<br>
 
-  Refresh (sec):
-  <input type="number" id="interval" value="5">
+Refresh(sec):
+<input type="number" id="interval" value="5">
 
-  <br>
+<br>
 
-  <input type="text" id="search" placeholder="Search location">
-  <button onclick="searchLocation()">Search</button>
+<h4>🎯 Destination Alert</h4>
 
-  <br>
+Lat: <input id="destLat">
+Lng: <input id="destLng">
 
-  <button onclick="saveLocation()">Save Location</button>
-  <button onclick="exportCSV()">Export Locations</button>
-  <button onclick="exportRouteCSV()">Export Route</button>
-  <button onclick="clearRoute()">Clear Route</button>
+<br>
 
-  <div id="coords" style="margin-top:10px;font-weight:bold;"></div>
+Radius (meters):
+<input id="radius" type="number" value="500">
+
+<button onclick="setDestination()">Set Destination</button>
+
+<br>
+
+<button onclick="saveLocation()">Save Location</button>
+<button onclick="exportCSV()">Export Locations</button>
+<button onclick="exportRoute()">Export Route</button>
+
+<div id="coords"></div>
 
 </div>
 
 <div id="map"></div>
 
-<h3 style="padding:10px;">History</h3>
-<table id="historyTable">
-  <tr>
-    <th>Lat</th><th>Lng</th><th>Alt</th><th>Remark</th><th>Time</th>
-  </tr>
-</table>
-
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
 
-// MAP INIT
-let map = L.map('map').setView([20, 78], 5);
+// MAP
+let map = L.map('map').setView([20,78],5);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
 // STATE
-let marker = null;
-let watchId = null;
-let intervalId = null;
-let isRouteEnabled = false;
-let routeCoords = [];
-let routeLine = null;
-let currentPosition = {};
+let watchId=null, intervalId=null;
+let marker=null;
+let routeLine=null;
+let routeCoords=[];
+let isRoute=false;
+
+let destination=null;
+let alertRadius=500;
+let alertTriggered=false;
+
+let currentPosition={};
 let history = JSON.parse(localStorage.getItem("history") || "[]");
 
-// TOGGLE TRACKING
-function toggleTracking(el) {
-  if (el.checked) startTracking();
-  else {
-    stopTracking();
-    clearDisplay();
-  }
+// TRACKING
+function toggleTracking(el){
+  if(el.checked) startTracking();
+  else stopTracking();
 }
 
-function startTracking() {
-  let interval = document.getElementById("interval").value * 1000;
+function startTracking(){
+  let interval = document.getElementById("interval").value*1000;
 
-  watchId = navigator.geolocation.watchPosition(updateUI, handleError, {
-    enableHighAccuracy: true
-  });
+  watchId = navigator.geolocation.watchPosition(updateUI);
 
-  intervalId = setInterval(() => {
+  intervalId = setInterval(()=>{
     navigator.geolocation.getCurrentPosition(updateUI);
   }, interval);
 }
 
-function stopTracking() {
+function stopTracking(){
   navigator.geolocation.clearWatch(watchId);
   clearInterval(intervalId);
 }
 
-// ROUTE TOGGLE
-function toggleRoute(el) {
-  isRouteEnabled = el.checked;
+// ROUTE
+function toggleRoute(el){
+  isRoute = el.checked;
 }
 
-// UPDATE LOCATION
-function updateUI(position) {
-  const { latitude, longitude, altitude, accuracy } = position.coords;
-  const point = [latitude, longitude];
+// DESTINATION
+function setDestination(){
+  let lat = parseFloat(destLat.value);
+  let lng = parseFloat(destLng.value);
+
+  alertRadius = parseInt(radius.value);
+
+  destination = {lat, lng};
+  alertTriggered=false;
+
+  L.marker([lat,lng]).addTo(map)
+    .bindPopup("🎯 Destination")
+    .openPopup();
+}
+
+// DISTANCE
+function getDistance(lat1, lon1, lat2, lon2){
+  const R = 6371e3;
+  const toRad = x=>x*Math.PI/180;
+
+  let dLat = toRad(lat2-lat1);
+  let dLon = toRad(lon2-lon1);
+
+  let a =
+    Math.sin(dLat/2)**2 +
+    Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*
+    Math.sin(dLon/2)**2;
+
+  let c = 2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+
+  return R*c;
+}
+
+// UPDATE UI
+function updateUI(pos){
+
+  let {latitude, longitude, accuracy} = pos.coords;
 
   currentPosition = {
     lat: latitude,
     lng: longitude,
-    alt: altitude || 0,
-    accuracy,
     time: new Date().toLocaleString()
   };
 
-  document.getElementById("coords").innerHTML = `
-    📍 Lat: ${latitude.toFixed(6)} <br>
-    📍 Lng: ${longitude.toFixed(6)} <br>
-    🏔 Alt: ${altitude ? altitude.toFixed(2) + ' m' : 'N/A'} <br>
-    🎯 Accuracy: ${accuracy.toFixed(2)} m
-  `;
+  document.getElementById("coords").innerHTML =
+    `Lat: ${latitude.toFixed(6)} | Lng: ${longitude.toFixed(6)} | Accuracy: ${accuracy.toFixed(0)}m`;
 
-  if (marker) map.removeLayer(marker);
-  marker = L.marker(point).addTo(map);
-  map.setView(point, 16);
+  if(marker) map.removeLayer(marker);
+  marker = L.marker([latitude,longitude]).addTo(map);
+  map.setView([latitude,longitude],16);
 
-  // ROUTE TRACKING
-  if (isRouteEnabled) {
+  // ROUTE
+  if(isRoute){
+    let point=[latitude,longitude];
 
-    if (routeCoords.length > 0) {
-      let last = routeCoords[routeCoords.length - 1];
+    if(routeCoords.length>0){
+      let last=routeCoords[routeCoords.length-1];
       let dist = map.distance(last, point);
-      if (dist < 5) return;
+      if(dist<5) return;
     }
 
     routeCoords.push(point);
 
-    if (routeLine) map.removeLayer(routeLine);
+    if(routeLine) map.removeLayer(routeLine);
+    routeLine = L.polyline(routeCoords,{color:'blue'}).addTo(map);
+  }
 
-    routeLine = L.polyline(routeCoords, {
-      color: 'blue',
-      weight: 4
-    }).addTo(map);
+  // DESTINATION ALERT
+  if(destination && !alertTriggered){
+
+    let dist = getDistance(
+      latitude, longitude,
+      destination.lat, destination.lng
+    );
+
+    document.getElementById("coords").innerHTML +=
+      `<br>Distance: ${dist.toFixed(0)} m`;
+
+    if(dist <= alertRadius){
+      triggerAlarm();
+      alertTriggered=true;
+    }
   }
 }
 
-// SAVE LOCATION
-function saveLocation() {
-  let remark = prompt("Enter remark:");
+// ALARM
+function triggerAlarm(){
 
-  let data = { ...currentPosition, remark };
+  let audio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
+  audio.play();
+
+  if(navigator.vibrate){
+    navigator.vibrate([500,200,500]);
+  }
+
+  if(Notification.permission==="granted"){
+    new Notification("🚨 Destination Reached",{
+      body:"You are near your stop"
+    });
+  }else{
+    Notification.requestPermission();
+  }
+
+  alert("🚨 You are near destination!");
+}
+
+// SAVE
+function saveLocation(){
+  let remark = prompt("Remark:");
+  let data = {...currentPosition, remark};
 
   history.push(data);
   localStorage.setItem("history", JSON.stringify(history));
-
-  renderHistory();
 }
 
-// RENDER HISTORY
-function renderHistory() {
-  let table = document.getElementById("historyTable");
-
-  table.innerHTML = `
-    <tr>
-      <th>Lat</th><th>Lng</th><th>Alt</th><th>Remark</th><th>Time</th>
-    </tr>`;
-
-  history.forEach(h => {
-    let row = table.insertRow();
-    row.innerHTML = `
-      <td>${h.lat}</td>
-      <td>${h.lng}</td>
-      <td>${h.alt}</td>
-      <td>${h.remark}</td>
-      <td>${h.time}</td>
-    `;
-
-    row.onclick = () => {
-      map.setView([h.lat, h.lng], 15);
-      L.marker([h.lat, h.lng]).addTo(map);
-    };
-  });
-}
-
-// EXPORT LOCATION CSV
-function exportCSV() {
-  let csv = "Lat,Lng,Alt,Remark,Time\n";
-
-  history.forEach(h => {
-    csv += `${h.lat},${h.lng},${h.alt},${h.remark},${h.time}\n`;
+// EXPORT
+function exportCSV(){
+  let csv="Lat,Lng,Remark,Time\n";
+  history.forEach(h=>{
+    csv+=`${h.lat},${h.lng},${h.remark},${h.time}\n`;
   });
 
-  downloadCSV(csv, "locations.csv");
+  download(csv,"locations.csv");
 }
 
-// EXPORT ROUTE CSV
-function exportRouteCSV() {
-  let csv = "Lat,Lng\n";
-
-  routeCoords.forEach(p => {
-    csv += `${p[0]},${p[1]}\n`;
+function exportRoute(){
+  let csv="Lat,Lng\n";
+  routeCoords.forEach(p=>{
+    csv+=`${p[0]},${p[1]}\n`;
   });
 
-  downloadCSV(csv, "route.csv");
+  download(csv,"route.csv");
 }
 
-function downloadCSV(data, filename) {
-  let blob = new Blob([data], { type: 'text/csv' });
-  let a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
+function download(data,name){
+  let blob=new Blob([data]);
+  let a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=name;
   a.click();
 }
 
-// CLEAR ROUTE
-function clearRoute() {
-  routeCoords = [];
-  if (routeLine) {
-    map.removeLayer(routeLine);
-    routeLine = null;
-  }
-}
-
-// SEARCH LOCATION
-function searchLocation() {
-  let query = document.getElementById("search").value;
-
-  fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}`)
-    .then(res => res.json())
-    .then(data => {
-      if (data.length > 0) {
-        let lat = data[0].lat;
-        let lon = data[0].lon;
-
-        map.setView([lat, lon], 14);
-        L.marker([lat, lon]).addTo(map);
-      }
-    });
-}
-
-// ERROR HANDLER
-function handleError(err) {
-  document.getElementById("coords").innerHTML =
-    `❌ Error: ${err.message}`;
-}
-
-// CLEAR DISPLAY
-function clearDisplay() {
-  document.getElementById("coords").innerHTML = "Tracking stopped";
-}
-
-// INIT
-renderHistory();
+// MAP CLICK AUTO FILL
+map.on("click",function(e){
+  destLat.value = e.latlng.lat;
+  destLng.value = e.latlng.lng;
+});
 
 </script>
 
