@@ -20,8 +20,11 @@
             width: 90%; max-width: 400px; text-align: center;
         }
 
-        .data-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; color: #333; }
+        .data-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; color: #333; }
         .data-value { font-weight: bold; color: #007bff; }
+        
+        /* New Status Text */
+        #status-text { font-size: 12px; color: #666; margin-bottom: 10px; min-height: 15px; font-style: italic; }
 
         button {
             width: 100%; padding: 12px; margin-top: 8px; border: none;
@@ -31,6 +34,7 @@
         .btn-primary { background: #007bff; color: white; }
         .btn-primary:active { background: #0056b3; }
         .btn-success { background: #28a745; color: white; }
+        .btn-success:disabled { background: #88cfa6; cursor: not-allowed; }
         .btn-secondary { background: #6c757d; color: white; }
 
         /* History Modal */
@@ -45,6 +49,8 @@
         table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }
+        
+        .delete-btn { background: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -57,6 +63,8 @@
             <span>Lng: <span id="ui-lng" class="data-value">--</span></span>
             <span>Alt: <span id="ui-alt" class="data-value">--</span></span>
         </div>
+        <div id="status-text">Ready to track</div>
+        
         <button class="btn-primary" id="btn-toggle-track" onclick="toggleTracking()">Start Live Tracking</button>
         <button class="btn-success" id="btn-save" onclick="saveCurrentLocation()" disabled>Pin & Save Location</button>
         <button class="btn-secondary" onclick="openHistory()">View History & Export</button>
@@ -67,7 +75,7 @@
             <h2 style="margin-top:0;">Saved Locations</h2>
             <div style="overflow-x: auto;">
                 <table id="history-table">
-                    <thead><tr><th>Time</th><th>Lat, Lng</th><th>Remark</th></tr></thead>
+                    <thead><tr><th>Time</th><th>Location</th><th>Remark</th><th>Act</th></tr></thead>
                     <tbody id="history-body"></tbody>
                 </table>
             </div>
@@ -86,7 +94,7 @@
         // Initialize Map (Centered on a default global view initially)
         map = L.map('map').setView([20, 0], 2);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
+            attribution: '© OpenStreetMap'
         }).addTo(map);
 
         // Render existing saved pins on load
@@ -95,6 +103,7 @@
         // --- 2. Live Tracking Logic ---
         function toggleTracking() {
             const btn = document.getElementById('btn-toggle-track');
+            const statusText = document.getElementById('status-text');
             
             if (watchId) {
                 // Stop Tracking
@@ -103,18 +112,33 @@
                 btn.innerText = "Start Live Tracking";
                 btn.style.background = "#007bff";
                 document.getElementById('btn-save').disabled = true;
+                statusText.innerText = "Tracking stopped.";
+                statusText.style.color = "#666";
             } else {
                 // Start Tracking
-                if (!navigator.geolocation) return alert("Geolocation not supported!");
+                if (!navigator.geolocation) {
+                    statusText.innerText = "Geolocation not supported by your browser.";
+                    statusText.style.color = "red";
+                    return;
+                }
                 
                 btn.innerText = "Stop Tracking";
                 btn.style.background = "#dc3545"; // Red
-                document.getElementById('btn-save').disabled = false;
+                statusText.innerText = "Acquiring signal... Please wait.";
+                statusText.style.color = "#ff8c00"; // Orange
+
+                // UPDATED CONFIGURATION FOR BETTER DESKTOP SUPPORT
+                const geoOptions = { 
+                    enableHighAccuracy: false, // Changed to false to prevent desktop timeout
+                    maximumAge: 10000,         // Allow cached positions up to 10s old
+                    timeout: 15000             // Give the browser 15 seconds to find you
+                };
 
                 watchId = navigator.geolocation.watchPosition(
                     (position) => {
-                        // Filter noisy data (> 50m accuracy)
-                        if (position.coords.accuracy > 50) return;
+                        statusText.innerText = `Tracking active (Accuracy: ±${Math.round(position.coords.accuracy)}m)`;
+                        statusText.style.color = "green";
+                        document.getElementById('btn-save').disabled = false;
 
                         currentPos = {
                             lat: position.coords.latitude.toFixed(5),
@@ -132,14 +156,24 @@
                         // Update Map Marker
                         const latLng = [currentPos.lat, currentPos.lng];
                         if (!userMarker) {
-                            userMarker = L.marker(latLng).addTo(map).bindPopup("You are here").openPopup();
+                            userMarker = L.marker(latLng).addTo(map).bindPopup("Live Location").openPopup();
                             map.setView(latLng, 16);
                         } else {
                             userMarker.setLatLng(latLng);
+                            map.setView(latLng, map.getZoom()); // Keep map centered on movement
                         }
                     },
-                    (err) => alert("GPS Error: " + err.message),
-                    { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+                    (err) => {
+                        // Better Error Handling
+                        let errMsg = "Error finding location.";
+                        if (err.code === 1) errMsg = "Permission denied. Please allow location access.";
+                        if (err.code === 2) errMsg = "Position unavailable. No network/GPS.";
+                        if (err.code === 3) errMsg = "Request timed out. Try again.";
+                        
+                        statusText.innerText = errMsg;
+                        statusText.style.color = "red";
+                    },
+                    geoOptions
                 );
             }
         }
@@ -148,29 +182,36 @@
         function saveCurrentLocation() {
             if (!currentPos) return;
 
-            const remark = prompt("Enter a remark for this location (e.g., 'Site A Inspection'):");
+            const remark = prompt("Enter a remark for this location (e.g., 'Site A'):");
             if (remark === null) return; // User cancelled
 
-            const record = { ...currentPos, remark: remark || "No remark" };
+            const record = { 
+                id: Date.now().toString(), // Unique ID for deletion
+                ...currentPos, 
+                remark: remark || "No remark" 
+            };
             
             // Save to LocalStorage
             historyData.push(record);
             localStorage.setItem('geoHistory', JSON.stringify(historyData));
 
             // Drop a pin on the map
+            addPinToMap(record);
+
+            document.getElementById('status-text').innerText = "Location saved!";
+            setTimeout(() => {
+                if(watchId) document.getElementById('status-text').innerText = "Tracking active";
+            }, 3000);
+        }
+
+        function addPinToMap(record) {
             L.marker([record.lat, record.lng])
              .addTo(map)
              .bindPopup(`<b>${record.remark}</b><br>${record.lat}, ${record.lng}`);
-
-            alert("Location saved successfully!");
         }
 
         function renderSavedPins() {
-            historyData.forEach(record => {
-                L.marker([record.lat, record.lng])
-                 .addTo(map)
-                 .bindPopup(`<b>${record.remark}</b><br>${record.lat}, ${record.lng}`);
-            });
+            historyData.forEach(record => addPinToMap(record));
         }
 
         // --- 4. History Dashboard ---
@@ -180,12 +221,13 @@
             
             // Reverse to show newest first
             [...historyData].reverse().forEach(record => {
-                const date = new Date(record.time).toLocaleString();
+                const date = new Date(record.time).toLocaleString(undefined, {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
                 tbody.innerHTML += `
                     <tr>
-                        <td>${date}</td>
-                        <td>${record.lat},<br>${record.lng}</td>
+                        <td style="font-size: 12px;">${date}</td>
+                        <td style="font-size: 12px;">${record.lat},<br>${record.lng}</td>
                         <td>${record.remark}</td>
+                        <td><button class="delete-btn" onclick="deleteRecord('${record.id}')">X</button></td>
                     </tr>
                 `;
             });
@@ -194,6 +236,17 @@
 
         function closeHistory() {
             document.getElementById('history-modal').style.display = 'none';
+        }
+
+        function deleteRecord(id) {
+            if(confirm("Delete this saved location?")) {
+                historyData = historyData.filter(r => r.id !== id);
+                localStorage.setItem('geoHistory', JSON.stringify(historyData));
+                openHistory(); // Refresh table
+                // Note: To remove the pin from the map requires reloading the page or tracking marker objects.
+                // For this MVP, we will just alert the user.
+                alert("Deleted. Refresh page to clear the pin from the map.");
+            }
         }
 
         // --- 5. Export to CSV ---
