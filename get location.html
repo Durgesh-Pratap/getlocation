@@ -1,9 +1,222 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-    <title>Get Location</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GeoTracker MVP</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        #map { height: 100vh; width: 100vw; z-index: 1; }
+        
+        /* Floating UI Panel */
+        #ui-panel {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: white; padding: 15px; border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 1000;
+            width: 90%; max-width: 400px; text-align: center;
+        }
+
+        .data-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; color: #333; }
+        .data-value { font-weight: bold; color: #007bff; }
+
+        button {
+            width: 100%; padding: 12px; margin-top: 8px; border: none;
+            border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-primary:active { background: #0056b3; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+
+        /* History Modal */
+        #history-modal {
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 2000; overflow-y: auto;
+        }
+        .modal-content {
+            background: white; margin: 20px auto; padding: 20px;
+            width: 90%; max-width: 600px; border-radius: 12px;
+        }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
 </head>
 <body>
-    <h1>Get Location</h1>
-    <p>This is a sample HTML file to get location.</p>
+
+    <div id="map"></div>
+
+    <div id="ui-panel">
+        <div class="data-row">
+            <span>Lat: <span id="ui-lat" class="data-value">--</span></span>
+            <span>Lng: <span id="ui-lng" class="data-value">--</span></span>
+            <span>Alt: <span id="ui-alt" class="data-value">--</span></span>
+        </div>
+        <button class="btn-primary" id="btn-toggle-track" onclick="toggleTracking()">Start Live Tracking</button>
+        <button class="btn-success" id="btn-save" onclick="saveCurrentLocation()" disabled>Pin & Save Location</button>
+        <button class="btn-secondary" onclick="openHistory()">View History & Export</button>
+    </div>
+
+    <div id="history-modal">
+        <div class="modal-content">
+            <h2 style="margin-top:0;">Saved Locations</h2>
+            <div style="overflow-x: auto;">
+                <table id="history-table">
+                    <thead><tr><th>Time</th><th>Lat, Lng</th><th>Remark</th></tr></thead>
+                    <tbody id="history-body"></tbody>
+                </table>
+            </div>
+            <br>
+            <button class="btn-primary" onclick="exportCSV()">Export to CSV</button>
+            <button class="btn-secondary" onclick="closeHistory()">Close</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. App State & Init ---
+        let map, userMarker, watchId = null;
+        let currentPos = null;
+        let historyData = JSON.parse(localStorage.getItem('geoHistory')) || [];
+
+        // Initialize Map (Centered on a default global view initially)
+        map = L.map('map').setView([20, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Render existing saved pins on load
+        renderSavedPins();
+
+        // --- 2. Live Tracking Logic ---
+        function toggleTracking() {
+            const btn = document.getElementById('btn-toggle-track');
+            
+            if (watchId) {
+                // Stop Tracking
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+                btn.innerText = "Start Live Tracking";
+                btn.style.background = "#007bff";
+                document.getElementById('btn-save').disabled = true;
+            } else {
+                // Start Tracking
+                if (!navigator.geolocation) return alert("Geolocation not supported!");
+                
+                btn.innerText = "Stop Tracking";
+                btn.style.background = "#dc3545"; // Red
+                document.getElementById('btn-save').disabled = false;
+
+                watchId = navigator.geolocation.watchPosition(
+                    (position) => {
+                        // Filter noisy data (> 50m accuracy)
+                        if (position.coords.accuracy > 50) return;
+
+                        currentPos = {
+                            lat: position.coords.latitude.toFixed(5),
+                            lng: position.coords.longitude.toFixed(5),
+                            alt: position.coords.altitude ? Math.round(position.coords.altitude) + 'm' : 'N/A',
+                            acc: Math.round(position.coords.accuracy),
+                            time: new Date().toISOString()
+                        };
+
+                        // Update UI
+                        document.getElementById('ui-lat').innerText = currentPos.lat;
+                        document.getElementById('ui-lng').innerText = currentPos.lng;
+                        document.getElementById('ui-alt').innerText = currentPos.alt;
+
+                        // Update Map Marker
+                        const latLng = [currentPos.lat, currentPos.lng];
+                        if (!userMarker) {
+                            userMarker = L.marker(latLng).addTo(map).bindPopup("You are here").openPopup();
+                            map.setView(latLng, 16);
+                        } else {
+                            userMarker.setLatLng(latLng);
+                        }
+                    },
+                    (err) => alert("GPS Error: " + err.message),
+                    { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+                );
+            }
+        }
+
+        // --- 3. Save & Pin Logic ---
+        function saveCurrentLocation() {
+            if (!currentPos) return;
+
+            const remark = prompt("Enter a remark for this location (e.g., 'Site A Inspection'):");
+            if (remark === null) return; // User cancelled
+
+            const record = { ...currentPos, remark: remark || "No remark" };
+            
+            // Save to LocalStorage
+            historyData.push(record);
+            localStorage.setItem('geoHistory', JSON.stringify(historyData));
+
+            // Drop a pin on the map
+            L.marker([record.lat, record.lng])
+             .addTo(map)
+             .bindPopup(`<b>${record.remark}</b><br>${record.lat}, ${record.lng}`);
+
+            alert("Location saved successfully!");
+        }
+
+        function renderSavedPins() {
+            historyData.forEach(record => {
+                L.marker([record.lat, record.lng])
+                 .addTo(map)
+                 .bindPopup(`<b>${record.remark}</b><br>${record.lat}, ${record.lng}`);
+            });
+        }
+
+        // --- 4. History Dashboard ---
+        function openHistory() {
+            const tbody = document.getElementById('history-body');
+            tbody.innerHTML = '';
+            
+            // Reverse to show newest first
+            [...historyData].reverse().forEach(record => {
+                const date = new Date(record.time).toLocaleString();
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${date}</td>
+                        <td>${record.lat},<br>${record.lng}</td>
+                        <td>${record.remark}</td>
+                    </tr>
+                `;
+            });
+            document.getElementById('history-modal').style.display = 'block';
+        }
+
+        function closeHistory() {
+            document.getElementById('history-modal').style.display = 'none';
+        }
+
+        // --- 5. Export to CSV ---
+        function exportCSV() {
+            if (historyData.length === 0) return alert("No data to export.");
+
+            let csvContent = "data:text/csv;charset=utf-8,";
+            csvContent += "Timestamp,Latitude,Longitude,Altitude,Accuracy(m),Remark\n";
+
+            historyData.forEach(row => {
+                // Escape quotes in remarks to prevent CSV breaking
+                const safeRemark = `"${row.remark.replace(/"/g, '""')}"`;
+                csvContent += `${row.time},${row.lat},${row.lng},${row.alt},${row.acc},${safeRemark}\n`;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `GeoData_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
 </body>
 </html>
