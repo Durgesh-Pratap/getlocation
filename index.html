@@ -2,296 +2,211 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GeoTracker MVP</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoPulse | Search & Survey</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
     
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
     <style>
-        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-        #map { height: 100vh; width: 100vw; z-index: 1; cursor: crosshair; }
-        
-        /* Floating UI Panel */
-        #ui-panel {
-            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-            background: white; padding: 15px; border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 1000;
-            width: 90%; max-width: 400px; text-align: center;
+        :root {
+            --primary: #6366f1; --bg: #0f172a; --card: rgba(30, 41, 59, 0.7);
+            --text: #f8fafc; --accent: #22d3ee; --nav: #fbbf24; --ruler: #ec4899;
         }
 
-        .data-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 14px; color: #333; }
-        .data-value { font-weight: bold; color: #007bff; }
-        
-        #status-text { font-size: 12px; color: #666; margin-bottom: 10px; min-height: 15px; font-weight: bold; }
-        .instruction { font-size: 11px; color: #888; margin-top: 10px; font-style: italic; }
+        [data-theme="night"] {
+            --primary: #991b1b; --bg: #000000; --card: #120000;
+            --text: #ff4444; --accent: #ff0000; --nav: #ff0000; --ruler: #ff00ff;
+        }
 
-        .btn-group { display: flex; gap: 10px; margin-top: 8px; }
-        button {
-            flex: 1; padding: 10px; border: none;
-            border-radius: 8px; font-weight: bold; font-size: 14px; cursor: pointer;
-            transition: background 0.2s;
+        body {
+            margin: 0; font-family: 'Inter', sans-serif;
+            background: var(--bg); color: var(--text);
+            display: flex; flex-direction: column; height: 100vh; overflow: hidden;
         }
-        .btn-primary { background: #007bff; color: white; }
-        .btn-primary:active { background: #0056b3; }
-        .btn-success { background: #28a745; color: white; }
-        .btn-success:disabled { background: #88cfa6; cursor: not-allowed; }
-        .btn-secondary { background: #6c757d; color: white; width: 100%; margin-top: 10px; }
-        .btn-danger { background: #dc3545; color: white; }
 
-        /* History Modal */
-        #history-modal {
-            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); z-index: 2000; overflow-y: auto;
+        header {
+            background: rgba(0,0,0,0.9); padding: 10px 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1); z-index: 1000;
         }
-        .modal-content {
-            background: white; margin: 20px auto; padding: 20px;
-            width: 90%; max-width: 600px; border-radius: 12px;
+
+        .main-layout { display: grid; grid-template-columns: 360px 1fr; height: calc(100vh - 50px); }
+
+        .sidebar {
+            padding: 15px; overflow-y: auto; background: var(--bg);
+            border-right: 1px solid rgba(255,255,255,0.1);
+            display: flex; flex-direction: column; gap: 12px;
         }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        
-        .delete-btn { background: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+
+        .card { background: var(--card); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 14px; }
+
+        /* SEARCH BAR GADGET */
+        .search-container { position: relative; margin-bottom: 5px; }
+        #searchInput {
+            width: 100%; padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(0,0,0,0.4); color: var(--text); font-size: 14px; box-sizing: border-box;
+        }
+        #searchResults {
+            position: absolute; width: 100%; background: #1e293b; border-radius: 0 0 8px 8px;
+            z-index: 2000; max-height: 200px; overflow-y: auto; box-shadow: 0 10px 15px rgba(0,0,0,0.5);
+        }
+        .search-item { padding: 10px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 12px; }
+        .search-item:hover { background: var(--primary); color: white; }
+
+        /* UI ELEMENTS */
+        button { cursor: pointer; border: none; border-radius: 8px; padding: 10px; font-weight: 600; color: white; transition: 0.2s; width: 100%; margin-bottom: 5px; }
+        .btn-blue { background: var(--primary); }
+        .btn-gold { background: var(--nav); color: black; }
+        .btn-ruler { background: var(--ruler); }
+
+        #map { width: 100%; height: 100%; }
+        [data-theme="night"] #map { filter: invert(100%) hue-rotate(180deg) brightness(0.7); }
+
+        .metric { font-family: 'JetBrains Mono', monospace; font-size: 18px; color: var(--accent); }
+        .label { font-size: 9px; text-transform: uppercase; opacity: 0.7; letter-spacing: 1px; }
     </style>
 </head>
-<body>
+<body data-theme="day">
+
+<header>
+    <span>📡 GEOPULSE COMMAND</span>
+    <button onclick="toggleNightMode()" style="background:none; border:1px solid var(--text); color:var(--text); padding:4px 10px; border-radius:5px; cursor:pointer;">🌓 Toggle Night</button>
+</header>
+
+<div class="main-layout">
+    <div class="sidebar">
+        
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="🔍 Search location..." onkeyup="searchLocation(this.value)">
+            <div id="searchResults"></div>
+        </div>
+
+        <div id="rulerHud" class="card" style="display:none; border: 2px solid var(--ruler);">
+            <div class="label" style="color: var(--ruler)">📏 Ruler Distance</div>
+            <div id="rulerDist" class="metric" style="color: var(--ruler)">0.00 m</div>
+            <button onclick="clearRuler()" style="background:rgba(255,255,255,0.1); font-size:10px; margin-top:5px;">Clear Measurements</button>
+        </div>
+
+        <div class="card">
+            <button class="btn-blue" onclick="toggleTracking(this)" id="trackBtn">Initialize GPS</button>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <button class="btn-gold" onclick="enablePinMode()">🎯 Target</button>
+                <button class="btn-ruler" onclick="enableRulerMode()">📏 Ruler</button>
+            </div>
+        </div>
+
+        <div class="card" id="navHud" style="display:none;">
+            <div style="display:flex; justify-content: space-between;">
+                <div><div class="label">To Target</div><div id="navDist" class="metric">--</div></div>
+                <div style="text-align:right"><div class="label">ETA</div><div id="eta" style="font-weight:bold; color:var(--nav)">--</div></div>
+            </div>
+        </div>
+
+        <div class="card" style="font-size: 10px; opacity: 0.5;">
+            LAT: <span id="curLat">--</span> | LNG: <span id="curLng">--</span>
+        </div>
+    </div>
 
     <div id="map"></div>
+</div>
 
-    <div id="ui-panel">
-        <div class="data-row">
-            <span>Lat: <span id="ui-lat" class="data-value">--</span></span>
-            <span>Lng: <span id="ui-lng" class="data-value">--</span></span>
-            <span>Alt: <span id="ui-alt" class="data-value">--</span></span>
-        </div>
-        <div id="status-text">Ready</div>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+    let map = L.map('map', {zoomControl: false}).setView([20,78], 5);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+
+    let marker, destMarker, watchId, destination;
+    let rulerPoints = [], rulerLine, rulerMarkers = [];
+    let isTracking = false, isPinMode = false, isRulerMode = false;
+
+    // --- SEARCH LOGIC ---
+    let searchTimeout;
+    async function searchLocation(query) {
+        clearTimeout(searchTimeout);
+        const resultsBox = document.getElementById('searchResults');
+        if (query.length < 3) { resultsBox.innerHTML = ''; return; }
+
+        searchTimeout = setTimeout(async () => {
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}`);
+            const data = await res.json();
+            resultsBox.innerHTML = data.map(item => `
+                <div class="search-item" onclick="goTo('${item.lat}', '${item.lon}', '${item.display_name.replace(/'/g, "\\'")}')">
+                    ${item.display_name}
+                </div>
+            `).join('');
+        }, 500);
+    }
+
+    function goTo(lat, lon, name) {
+        const coords = [parseFloat(lat), parseFloat(lon)];
+        map.flyTo(coords, 14);
+        L.popup().setLatLng(coords).setContent(name).openOn(map);
+        document.getElementById('searchResults').innerHTML = '';
+        document.getElementById('searchInput').value = '';
+    }
+
+    // --- GPS & TELEMETRY ---
+    function toggleTracking(btn) {
+        if(!isTracking) {
+            isTracking = true; btn.innerText = "Disable GPS"; btn.style.background = "#ef4444";
+            watchId = navigator.geolocation.watchPosition(updateUI, null, {enableHighAccuracy: true});
+        } else {
+            isTracking = false; btn.innerText = "Initialize GPS"; btn.style.background = "var(--primary)";
+            navigator.geolocation.clearWatch(watchId);
+        }
+    }
+
+    function updateUI(pos) {
+        const { latitude, longitude, speed } = pos.coords;
+        document.getElementById('curLat').innerText = latitude.toFixed(4);
+        document.getElementById('curLng').innerText = longitude.toFixed(4);
+        if (!marker) marker = L.circleMarker([latitude, longitude], { radius: 6, color: 'var(--accent)', fillOpacity: 1 }).addTo(map);
+        else marker.setLatLng([latitude, longitude]);
         
-        <div class="btn-group">
-            <button class="btn-primary" onclick="getCurrentLocation()">📍 Locate Me</button>
-            <button class="btn-primary" id="btn-toggle-track" onclick="toggleTracking()">🔄 Auto-Track</button>
-        </div>
-        
-        <button class="btn-success" id="btn-save" onclick="saveGPSLocation()" disabled style="width: 100%; margin-top: 10px;">💾 Save GPS Location</button>
-        <button class="btn-secondary" onclick="openHistory()">📋 View History & Export</button>
-        
-        <div class="instruction">💡 Tip: Tap anywhere on the map to drop a custom pin.</div>
-    </div>
-
-    <div id="history-modal">
-        <div class="modal-content">
-            <h2 style="margin-top:0;">Saved Locations</h2>
-            <div style="overflow-x: auto;">
-                <table id="history-table">
-                    <thead><tr><th>Time</th><th>Location</th><th>Remark</th><th>Act</th></tr></thead>
-                    <tbody id="history-body"></tbody>
-                </table>
-            </div>
-            <br>
-            <button class="btn-primary" style="width:100%" onclick="exportCSV()">⬇️ Export to CSV</button>
-            <button class="btn-secondary" onclick="closeHistory()">Close</button>
-        </div>
-    </div>
-
-    <script>
-        // --- 1. App State & Init ---
-        let map, userMarker, watchId = null;
-        let currentPos = null;
-        let historyData = JSON.parse(localStorage.getItem('geoHistory')) || [];
-
-        // Relaxed GPS Options for Desktop/Mobile compatibility
-        const geoOptions = { enableHighAccuracy: false, maximumAge: 10000, timeout: 15000 };
-
-        // Initialize Map
-        map = L.map('map').setView([20, 0], 2);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
-        }).addTo(map);
-
-        // Render existing saved pins on load
-        renderSavedPins();
-
-        // --- 2. NEW: Click/Tap Map to Drop Pin ---
-        map.on('click', function(e) {
-            const lat = e.latlng.lat.toFixed(5);
-            const lng = e.lng.toFixed(5);
-            
-            const remark = prompt(`Drop pin at ${lat}, ${lng}?\nEnter a remark:` , "Manual Pin");
-            if (!remark) return; // User cancelled
-
-            const record = { 
-                id: Date.now().toString(),
-                lat: lat,
-                lng: lng,
-                alt: 'N/A',
-                acc: 'Manual',
-                time: new Date().toISOString(),
-                remark: remark
-            };
-            
-            saveRecord(record);
-        });
-
-        // --- 3. NEW: Get Current Location (One-off) ---
-        function getCurrentLocation() {
-            const statusText = document.getElementById('status-text');
-            statusText.innerText = "Locating you...";
-            statusText.style.color = "#007bff";
-
-            if (!navigator.geolocation) {
-                statusText.innerText = "Geolocation not supported.";
-                statusText.style.color = "red";
-                return;
-            }
-
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    handlePositionUpdate(position);
-                    statusText.innerText = "Location found!";
-                    statusText.style.color = "green";
-                },
-                (err) => handleError(err),
-                geoOptions
-            );
+        if (destination) {
+            const dist = calcDist(latitude, longitude, destination.lat, destination.lng);
+            document.getElementById('navDist').innerText = dist > 1000 ? (dist/1000).toFixed(1)+"km" : Math.round(dist)+"m";
+            const time = speed > 0.5 ? dist/speed : 0;
+            document.getElementById('eta').innerText = time > 0 ? Math.round(time/60)+"m" : "WAITING";
         }
+    }
 
-        // --- 4. Live Auto-Tracking ---
-        function toggleTracking() {
-            const btn = document.getElementById('btn-toggle-track');
-            const statusText = document.getElementById('status-text');
-            
-            if (watchId) {
-                navigator.geolocation.clearWatch(watchId);
-                watchId = null;
-                btn.innerText = "🔄 Auto-Track";
-                btn.className = "btn-primary";
-                statusText.innerText = "Tracking stopped.";
-                statusText.style.color = "#666";
-            } else {
-                btn.innerText = "⏹ Stop Tracking";
-                btn.className = "btn-danger";
-                statusText.innerText = "Acquiring signal...";
-                statusText.style.color = "#ff8c00";
+    // --- RULER & TOOLS ---
+    function enableRulerMode() { isRulerMode = true; isPinMode = false; document.getElementById('rulerHud').style.display = 'block'; }
+    function enablePinMode() { isPinMode = true; isRulerMode = false; document.getElementById('rulerHud').style.display = 'none'; }
+    function clearRuler() { 
+        rulerPoints = []; rulerMarkers.forEach(m => map.removeLayer(m)); 
+        if(rulerLine) map.removeLayer(rulerLine); document.getElementById('rulerDist').innerText = "0.00 m"; 
+    }
 
-                watchId = navigator.geolocation.watchPosition(
-                    (position) => {
-                        handlePositionUpdate(position);
-                        statusText.innerText = `Tracking active (±${Math.round(position.coords.accuracy)}m)`;
-                        statusText.style.color = "green";
-                    },
-                    (err) => handleError(err),
-                    geoOptions
-                );
+    map.on('click', (e) => {
+        if(isRulerMode) {
+            rulerPoints.push(e.latlng);
+            rulerMarkers.push(L.circleMarker(e.latlng, {radius: 4, color: 'var(--ruler)'}).addTo(map));
+            if(rulerPoints.length > 1) {
+                if(rulerLine) map.removeLayer(rulerLine);
+                rulerLine = L.polyline(rulerPoints, {color: 'var(--ruler)', dashArray: '5, 10'}).addTo(map);
+                let d = 0; for(let i=0; i<rulerPoints.length-1; i++) d += calcDist(rulerPoints[i].lat, rulerPoints[i].lng, rulerPoints[i+1].lat, rulerPoints[i+1].lng);
+                document.getElementById('rulerDist').innerText = d > 1000 ? (d/1000).toFixed(2)+" km" : d.toFixed(1)+" m";
             }
         }
-
-        // --- Core Helpers ---
-        function handlePositionUpdate(position) {
-            currentPos = {
-                lat: position.coords.latitude.toFixed(5),
-                lng: position.coords.longitude.toFixed(5),
-                alt: position.coords.altitude ? Math.round(position.coords.altitude) + 'm' : 'N/A',
-                acc: Math.round(position.coords.accuracy),
-                time: new Date().toISOString()
-            };
-
-            document.getElementById('ui-lat').innerText = currentPos.lat;
-            document.getElementById('ui-lng').innerText = currentPos.lng;
-            document.getElementById('ui-alt').innerText = currentPos.alt;
-            document.getElementById('btn-save').disabled = false;
-
-            const latLng = [currentPos.lat, currentPos.lng];
-            if (!userMarker) {
-                userMarker = L.marker(latLng).addTo(map).bindPopup("Your GPS Location").openPopup();
-            } else {
-                userMarker.setLatLng(latLng);
-            }
-            map.setView(latLng, 16);
+        if(isPinMode) {
+            destination = { lat: e.latlng.lat, lng: e.latlng.lng };
+            if(destMarker) map.removeLayer(destMarker);
+            destMarker = L.circle(e.latlng, {radius: 100, color: 'var(--nav)'}).addTo(map);
+            document.getElementById('navHud').style.display = 'block';
         }
+    });
 
-        function handleError(err) {
-            let errMsg = "Error finding location.";
-            if (err.code === 1) errMsg = "Permission denied.";
-            if (err.code === 2) errMsg = "Position unavailable.";
-            if (err.code === 3) errMsg = "Request timed out.";
-            
-            const statusText = document.getElementById('status-text');
-            statusText.innerText = errMsg;
-            statusText.style.color = "red";
-        }
-
-        function saveGPSLocation() {
-            if (!currentPos) return;
-            const remark = prompt("Enter a remark for your current GPS location:", "My Location");
-            if (!remark) return;
-
-            const record = { id: Date.now().toString(), ...currentPos, remark: remark };
-            saveRecord(record);
-        }
-
-        function saveRecord(record) {
-            historyData.push(record);
-            localStorage.setItem('geoHistory', JSON.stringify(historyData));
-            addPinToMap(record);
-            document.getElementById('status-text').innerText = "Pin saved!";
-        }
-
-        function addPinToMap(record) {
-            L.marker([record.lat, record.lng])
-             .addTo(map)
-             .bindPopup(`<b>${record.remark}</b><br>${record.lat}, ${record.lng}`);
-        }
-
-        function renderSavedPins() {
-            historyData.forEach(record => addPinToMap(record));
-        }
-
-        // --- History & Export ---
-        function openHistory() {
-            const tbody = document.getElementById('history-body');
-            tbody.innerHTML = '';
-            
-            [...historyData].reverse().forEach(record => {
-                const date = new Date(record.time).toLocaleString(undefined, {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
-                tbody.innerHTML += `
-                    <tr>
-                        <td style="font-size: 12px;">${date}</td>
-                        <td style="font-size: 12px;">${record.lat},<br>${record.lng}</td>
-                        <td>${record.remark}</td>
-                        <td><button class="delete-btn" onclick="deleteRecord('${record.id}')">X</button></td>
-                    </tr>
-                `;
-            });
-            document.getElementById('history-modal').style.display = 'block';
-        }
-
-        function closeHistory() {
-            document.getElementById('history-modal').style.display = 'none';
-        }
-
-        function deleteRecord(id) {
-            if(confirm("Delete this saved location?")) {
-                historyData = historyData.filter(r => r.id !== id);
-                localStorage.setItem('geoHistory', JSON.stringify(historyData));
-                openHistory();
-                alert("Deleted. Refresh page to clear the pin from the map.");
-            }
-        }
-
-        function exportCSV() {
-            if (historyData.length === 0) return alert("No data to export.");
-            let csvContent = "data:text/csv;charset=utf-8,Timestamp,Latitude,Longitude,Altitude,Accuracy(m),Remark\n";
-            historyData.forEach(row => {
-                const safeRemark = `"${row.remark.replace(/"/g, '""')}"`;
-                csvContent += `${row.time},${row.lat},${row.lng},${row.alt},${row.acc},${safeRemark}\n`;
-            });
-            const link = document.createElement("a");
-            link.setAttribute("href", encodeURI(csvContent));
-            link.setAttribute("download", `GeoData_${new Date().toISOString().split('T')[0]}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-    </script>
+    function toggleNightMode() { document.body.setAttribute('data-theme', document.body.getAttribute('data-theme') === 'day' ? 'night' : 'day'); }
+    function calcDist(lat1, lon1, lat2, lon2) {
+        const R = 6371e3;
+        const dLat = (lat2-lat1) * Math.PI/180; const dLon = (lon2-lon1) * Math.PI/180;
+        const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+</script>
 </body>
 </html>
