@@ -1,334 +1,246 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Geo Alert Tracker</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoPulse | Alarm & Tracker</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+    
+    <style>
+        :root {
+            --primary: #2563eb;
+            --danger: #dc2626;
+            --success: #16a34a;
+            --bg: #f1f5f9;
+            --card: #ffffff;
+        }
 
-<style>
-body {
-  margin: 0;
-  font-family: system-ui;
-  background: #f2f4f8;
-}
+        body {
+            margin: 0; font-family: system-ui, -apple-system, sans-serif;
+            background: var(--bg); color: #1e293b;
+            display: flex; flex-direction: column; height: 100vh;
+        }
 
-header {
-  background: #1e293b;
-  color: white;
-  padding: 12px;
-  text-align: center;
-  font-size: 18px;
-  font-weight: bold;
-}
+        header {
+            background: #1e293b; color: white; padding: 12px;
+            text-align: center; font-weight: bold;
+        }
 
-.container {
-  padding: 10px;
-}
+        #map { height: 35vh; width: 100%; border-bottom: 2px solid #cbd5e1; }
 
-.card {
-  background: white;
-  border-radius: 12px;
-  padding: 10px;
-  margin-bottom: 10px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-}
+        .container { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
 
-button {
-  padding: 10px;
-  border: none;
-  border-radius: 8px;
-  margin: 4px;
-  font-size: 14px;
-}
+        .card {
+            background: var(--card); border-radius: 10px; padding: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1); border: 1px solid #e2e8f0;
+        }
 
-.primary { background: #2563eb; color: white; }
-.success { background: #16a34a; color: white; }
-.warning { background: #f59e0b; color: white; }
-.danger { background: #dc2626; color: white; }
+        h4 { margin: 0 0 10px 0; font-size: 0.9rem; color: #64748b; text-transform: uppercase; }
 
-input {
-  padding: 8px;
-  width: 100%;
-  margin-top: 5px;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-}
+        /* DATA DISPLAY */
+        .telemetry { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+        .data-box { background: #f8fafc; padding: 8px; border-radius: 6px; border: 1px solid #f1f5f9; }
+        .val { font-family: monospace; font-weight: bold; color: var(--primary); display: block; }
+        .lbl { font-size: 10px; color: #94a3b8; }
 
-#map {
-  height: 45vh;
-  border-radius: 10px;
-  overflow: hidden;
-}
+        /* ALARM UI */
+        .alarm-active { background: #fee2e2; border: 2px solid var(--danger); animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
 
-#coords {
-  font-size: 14px;
-  margin-top: 5px;
-}
+        /* INPUTS */
+        input, select {
+            width: 100%; padding: 10px; border: 1px solid #cbd5e1;
+            border-radius: 6px; margin-top: 5px; box-sizing: border-box;
+        }
 
-.small {
-  font-size: 12px;
-  color: #555;
-}
+        button {
+            padding: 12px; border: none; border-radius: 6px;
+            font-weight: bold; cursor: pointer; width: 100%; margin-top: 8px;
+        }
+        .btn-blue { background: var(--primary); color: white; }
+        .btn-red { background: var(--danger); color: white; }
+        .btn-green { background: var(--success); color: white; }
+        .btn-outline { background: white; border: 1px solid #cbd5e1; color: #64748b; }
 
-</style>
+        .flex-row { display: flex; gap: 10px; }
+    </style>
 </head>
-
 <body>
 
-<header>📍 Geo Alert Tracker</header>
-
-<div class="container">
-
-<div class="card">
-<button class="primary" onclick="getCurrentLocation()">📍 Get Current Location</button>
-
-<label><input type="checkbox" onchange="toggleTracking(this)"> Live Tracking</label>
-<label><input type="checkbox" onchange="toggleRoute(this)"> Route</label>
-
-<input type="number" id="interval" value="5" placeholder="Refresh seconds">
-
-<div id="coords"></div>
-</div>
-
-<div class="card">
-<h4>🎯 Destination</h4>
-
-<button class="warning" onclick="enablePinMode()">📌 Tap Map to Select</button>
-
-<input id="destLat" placeholder="Latitude">
-<input id="destLng" placeholder="Longitude">
-
-<input id="radius" type="number" value="500" placeholder="Alert Distance (meters)">
-
-<button class="success" onclick="setDestination()">Activate Alert</button>
-</div>
-
-<div class="card">
-<h4>📊 Actions</h4>
-<button onclick="saveLocation()">Save Location</button>
-<button onclick="exportCSV()">Export Locations</button>
-<button onclick="exportRoute()">Export Route</button>
-<button class="danger" onclick="clearRoute()">Clear Route</button>
-</div>
+<header>🛰️ GEOPULSE ALARM SYSTEM</header>
 
 <div id="map"></div>
 
+<div class="container">
+    <div class="card">
+        <h4>📡 Live Feed</h4>
+        <div class="telemetry">
+            <div class="data-box"><span class="lbl">LAT/LNG</span><span id="coords" class="val">0.00, 0.00</span></div>
+            <div class="data-box"><span class="lbl">ALTITUDE</span><span id="alt" class="val">--</span></div>
+            <div class="data-box"><span class="lbl">ACCURACY</span><span id="acc" class="val">--</span></div>
+            <div class="data-box"><span class="lbl">DISTANCE</span><span id="dist" class="val">--</span></div>
+        </div>
+        <button class="btn-blue" id="trackBtn" onclick="toggleTracking()">Start GPS Tracking</button>
+    </div>
+
+    <div id="alarmCard" class="card">
+        <h4>🚨 Proximity Alarm</h4>
+        <div class="flex-row">
+            <div style="flex:1">
+                <label class="lbl">Target Radius (Meters)</label>
+                <input type="number" id="radiusInput" value="500" placeholder="e.g. 500 or 50000">
+            </div>
+        </div>
+        <button class="btn-outline" onclick="enablePinMode()">📍 Drop Target Pin on Map</button>
+        <button class="btn-green" onclick="activateAlarm()">Set Alarm Target</button>
+        <button class="btn-red" id="stopAlarmBtn" style="display:none" onclick="silenceAlarm()">🔊 SILENCE ALARM</button>
+    </div>
+
+    <div class="card">
+        <h4>📝 Remarks & Actions</h4>
+        <input type="text" id="remark" placeholder="Remark for this location...">
+        <div class="flex-row">
+            <button class="btn-blue" onclick="savePoint()">Save Spot</button>
+            <button class="btn-outline" onclick="sharePoint()">Share</button>
+        </div>
+        <div class="flex-row" style="margin-top:5px">
+            <button class="btn-outline" style="font-size:11px" onclick="exportCSV()">Export Logs</button>
+            <button class="btn-red" style="font-size:11px" onclick="clearData()">Reset All</button>
+        </div>
+    </div>
 </div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
+    let map = L.map('map').setView([20,78], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-// MAP
-let map = L.map('map').setView([20,78],5);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    let marker, targetCircle, targetMarker, watchId;
+    let isTracking = false, isPinMode = false;
+    let targetCoords = null;
+    let history = JSON.parse(localStorage.getItem("geo_logs") || "[]");
+    let alarmAudio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
+    alarmAudio.loop = true;
 
-// STATE
-let marker=null, watchId=null, intervalId=null;
-let routeCoords=[], routeLine=null, isRoute=false;
-let destination=null, destinationMarker=null;
-let alertRadius=500, alertTriggered=false;
-let isPinMode=false;
-let currentPosition={};
-let history = JSON.parse(localStorage.getItem("history") || "[]");
-
-// GET LOCATION
-function getCurrentLocation(){
-  navigator.geolocation.getCurrentPosition(updateUI, handleError, {
-    enableHighAccuracy:true
-  });
-}
-
-// TRACKING
-function toggleTracking(el){
-  if(el.checked) startTracking();
-  else stopTracking();
-}
-
-function startTracking(){
-  let interval = intervalInput();
-
-  watchId = navigator.geolocation.watchPosition(updateUI, handleError);
-
-  intervalId = setInterval(()=>{
-    navigator.geolocation.getCurrentPosition(updateUI);
-  }, interval);
-}
-
-function stopTracking(){
-  navigator.geolocation.clearWatch(watchId);
-  clearInterval(intervalId);
-}
-
-function intervalInput(){
-  return document.getElementById("interval").value*1000;
-}
-
-// ROUTE
-function toggleRoute(el){
-  isRoute = el.checked;
-}
-
-// PIN MODE
-function enablePinMode(){
-  isPinMode = true;
-  alert("Tap on map to select destination");
-}
-
-// MAP CLICK
-map.on("click", function(e){
-
-  if(!isPinMode) return;
-
-  let lat = e.latlng.lat;
-  let lng = e.latlng.lng;
-
-  destLat.value = lat;
-  destLng.value = lng;
-
-  if(destinationMarker) map.removeLayer(destinationMarker);
-
-  destinationMarker = L.marker([lat,lng]).addTo(map)
-    .bindPopup("Destination Selected")
-    .openPopup();
-
-  isPinMode=false;
-});
-
-// SET DESTINATION
-function setDestination(){
-
-  let lat=parseFloat(destLat.value);
-  let lng=parseFloat(destLng.value);
-
-  if(!lat || !lng){
-    alert("Select destination first");
-    return;
-  }
-
-  alertRadius=parseInt(radius.value);
-  destination={lat,lng};
-  alertTriggered=false;
-
-  if(destinationMarker) map.removeLayer(destinationMarker);
-
-  destinationMarker = L.marker([lat,lng]).addTo(map)
-    .bindPopup("🎯 Active Destination")
-    .openPopup();
-}
-
-// UPDATE UI
-function updateUI(pos){
-
-  let {latitude, longitude, accuracy} = pos.coords;
-
-  currentPosition = {lat:latitude,lng:longitude,time:new Date().toLocaleString()};
-
-  coords.innerHTML = `
-  Lat: ${latitude.toFixed(6)}<br>
-  Lng: ${longitude.toFixed(6)}<br>
-  Accuracy: ${accuracy.toFixed(0)}m`;
-
-  if(marker) map.removeLayer(marker);
-  marker=L.marker([latitude,longitude]).addTo(map);
-  map.setView([latitude,longitude],16);
-
-  // ROUTE
-  if(isRoute){
-    let p=[latitude,longitude];
-
-    if(routeCoords.length>0){
-      let last=routeCoords.at(-1);
-      if(map.distance(last,p)<5) return;
+    function toggleTracking() {
+        const btn = document.getElementById('trackBtn');
+        if(!isTracking) {
+            isTracking = true;
+            btn.innerText = "Stop Tracking";
+            btn.className = "btn-red";
+            watchId = navigator.geolocation.watchPosition(updatePosition, null, {enableHighAccuracy: true});
+        } else {
+            isTracking = false;
+            btn.innerText = "Start GPS Tracking";
+            btn.className = "btn-blue";
+            navigator.geolocation.clearWatch(watchId);
+        }
     }
 
-    routeCoords.push(p);
+    function updatePosition(pos) {
+        const { latitude, longitude, altitude, accuracy } = pos.coords;
+        const latlng = [latitude, longitude];
 
-    if(routeLine) map.removeLayer(routeLine);
-    routeLine=L.polyline(routeCoords,{color:'blue'}).addTo(map);
-  }
+        // Update UI
+        document.getElementById('coords').innerText = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+        document.getElementById('alt').innerText = altitude ? altitude.toFixed(1) + "m" : "N/A";
+        document.getElementById('acc').innerText = "±" + accuracy.toFixed(0) + "m";
 
-  // ALERT
-  if(destination && !alertTriggered){
+        if (!marker) marker = L.circleMarker(latlng, {radius: 8, color: '#2563eb', fillOpacity: 1}).addTo(map);
+        else marker.setLatLng(latlng);
+        map.panTo(latlng);
 
-    let d = distance(latitude,longitude,destination.lat,destination.lng);
-
-    coords.innerHTML += `<br>Distance: ${d.toFixed(0)}m`;
-
-    if(d<=alertRadius){
-      triggerAlarm();
-      alertTriggered=true;
+        // Check Proximity
+        if (targetCoords) {
+            const d = map.distance(latlng, [targetCoords.lat, targetCoords.lng]);
+            document.getElementById('dist').innerText = d > 1000 ? (d/1000).toFixed(2) + "km" : Math.round(d) + "m";
+            
+            const radius = parseFloat(document.getElementById('radiusInput').value);
+            if (d <= radius) {
+                triggerAlarm();
+            }
+        }
     }
-  }
-}
 
-// DISTANCE
-function distance(lat1,lon1,lat2,lon2){
-  const R=6371e3;
-  const toRad=x=>x*Math.PI/180;
+    function enablePinMode() {
+        isPinMode = true;
+        alert("Tap the map to set your target destination.");
+    }
 
-  let dLat=toRad(lat2-lat1);
-  let dLon=toRad(lon2-lon1);
+    map.on('click', (e) => {
+        if(!isPinMode) return;
+        targetCoords = e.latlng;
+        activateAlarm();
+        isPinMode = false;
+    });
 
-  let a=Math.sin(dLat/2)**2+
-    Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*
-    Math.sin(dLon/2)**2;
+    function activateAlarm() {
+        if(!targetCoords) return alert("Select a target on the map first!");
+        
+        const radius = parseFloat(document.getElementById('radiusInput').value);
+        
+        if(targetCircle) map.removeLayer(targetCircle);
+        if(targetMarker) map.removeLayer(targetMarker);
 
-  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-}
+        targetMarker = L.marker(targetCoords).addTo(map).bindPopup("Target").openPopup();
+        targetCircle = L.circle(targetCoords, {
+            radius: radius,
+            color: '#dc2626',
+            fillColor: '#dc2626',
+            fillOpacity: 0.15
+        }).addTo(map);
 
-// ALARM
-function triggerAlarm(){
+        map.fitBounds(targetCircle.getBounds());
+    }
 
-  new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg").play();
+    function triggerAlarm() {
+        document.getElementById('alarmCard').classList.add('alarm-active');
+        document.getElementById('stopAlarmBtn').style.display = 'block';
+        alarmAudio.play();
+        if(navigator.vibrate) navigator.vibrate([500, 200, 500]);
+    }
 
-  if(navigator.vibrate){
-    navigator.vibrate([500,200,500]);
-  }
+    function silenceAlarm() {
+        alarmAudio.pause();
+        document.getElementById('alarmCard').classList.remove('alarm-active');
+        document.getElementById('stopAlarmBtn').style.display = 'none';
+        targetCoords = null; // Clear target so it doesn't re-trigger immediately
+    }
 
-  alert("🚨 You reached near destination!");
-}
+    // --- BASIC UTILITIES ---
+    function savePoint() {
+        const latlng = marker.getLatLng();
+        const remark = document.getElementById('remark').value || "No Remark";
+        history.push({time: new Date().toLocaleString(), lat: latlng.lat, lng: latlng.lng, remark});
+        localStorage.setItem("geo_logs", JSON.stringify(history));
+        alert("Point Saved!");
+    }
 
-// SAVE
-function saveLocation(){
-  let r=prompt("Remark:");
-  history.push({...currentPosition,remark:r});
-  localStorage.setItem("history",JSON.stringify(history));
-}
+    function sharePoint() {
+        const latlng = marker.getLatLng();
+        const url = `https://www.google.com/maps?q=${latlng.lat},${latlng.lng}`;
+        navigator.clipboard.writeText(url);
+        alert("Google Maps link copied!");
+    }
 
-// EXPORT
-function exportCSV(){
-  let csv="Lat,Lng,Remark,Time\n";
-  history.forEach(h=>csv+=`${h.lat},${h.lng},${h.remark},${h.time}\n`);
-  download(csv,"locations.csv");
-}
+    function exportCSV() {
+        let csv = "Time,Lat,Lng,Remark\n" + history.map(h => `${h.time},${h.lat},${h.lng},${h.remark}`).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'geo_logs.csv';
+        a.click();
+    }
 
-function exportRoute(){
-  let csv="Lat,Lng\n";
-  routeCoords.forEach(p=>csv+=`${p[0]},${p[1]}\n`);
-  download(csv,"route.csv");
-}
-
-function download(data,name){
-  let a=document.createElement("a");
-  a.href=URL.createObjectURL(new Blob([data]));
-  a.download=name;
-  a.click();
-}
-
-// CLEAR ROUTE
-function clearRoute(){
-  routeCoords=[];
-  if(routeLine) map.removeLayer(routeLine);
-}
-
-// ERROR
-function handleError(e){
-  coords.innerHTML="Error: "+e.message;
-}
-
+    function clearData() {
+        if(confirm("Wipe all data?")) {
+            localStorage.removeItem("geo_logs");
+            history = [];
+            location.reload();
+        }
+    }
 </script>
 
 </body>
