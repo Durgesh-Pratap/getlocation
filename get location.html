@@ -2,62 +2,120 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Geo Alert Tracker</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Geo Alert Tracker</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
 <style>
-body { margin:0; font-family: Arial; }
-#map { height: 55vh; }
-.controls { padding:10px; background:#f4f4f4; }
-input, button { margin:5px; padding:6px; }
-#coords { font-weight:bold; margin-top:10px; }
+body {
+  margin: 0;
+  font-family: system-ui;
+  background: #f2f4f8;
+}
+
+header {
+  background: #1e293b;
+  color: white;
+  padding: 12px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.container {
+  padding: 10px;
+}
+
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+button {
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  margin: 4px;
+  font-size: 14px;
+}
+
+.primary { background: #2563eb; color: white; }
+.success { background: #16a34a; color: white; }
+.warning { background: #f59e0b; color: white; }
+.danger { background: #dc2626; color: white; }
+
+input {
+  padding: 8px;
+  width: 100%;
+  margin-top: 5px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+#map {
+  height: 45vh;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+#coords {
+  font-size: 14px;
+  margin-top: 5px;
+}
+
+.small {
+  font-size: 12px;
+  color: #555;
+}
+
 </style>
 </head>
 
 <body>
 
-<div class="controls">
+<header>📍 Geo Alert Tracker</header>
 
-<label>
-<input type="checkbox" onchange="toggleTracking(this)"> Enable Tracking
-</label>
+<div class="container">
 
-<label>
-<input type="checkbox" onchange="toggleRoute(this)"> Route Tracking
-</label>
+<div class="card">
+<button class="primary" onclick="getCurrentLocation()">📍 Get Current Location</button>
 
-<br>
+<label><input type="checkbox" onchange="toggleTracking(this)"> Live Tracking</label>
+<label><input type="checkbox" onchange="toggleRoute(this)"> Route</label>
 
-Refresh(sec):
-<input type="number" id="interval" value="5">
+<input type="number" id="interval" value="5" placeholder="Refresh seconds">
 
-<br>
+<div id="coords"></div>
+</div>
 
-<h4>🎯 Destination Alert</h4>
+<div class="card">
+<h4>🎯 Destination</h4>
 
-Lat: <input id="destLat">
-Lng: <input id="destLng">
+<button class="warning" onclick="enablePinMode()">📌 Tap Map to Select</button>
 
-<br>
+<input id="destLat" placeholder="Latitude">
+<input id="destLng" placeholder="Longitude">
 
-Radius (meters):
-<input id="radius" type="number" value="500">
+<input id="radius" type="number" value="500" placeholder="Alert Distance (meters)">
 
-<button onclick="setDestination()">Set Destination</button>
+<button class="success" onclick="setDestination()">Activate Alert</button>
+</div>
 
-<br>
-
+<div class="card">
+<h4>📊 Actions</h4>
 <button onclick="saveLocation()">Save Location</button>
 <button onclick="exportCSV()">Export Locations</button>
 <button onclick="exportRoute()">Export Route</button>
-
-<div id="coords"></div>
-
+<button class="danger" onclick="clearRoute()">Clear Route</button>
 </div>
 
 <div id="map"></div>
+
+</div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
@@ -68,18 +126,20 @@ let map = L.map('map').setView([20,78],5);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
 // STATE
-let watchId=null, intervalId=null;
-let marker=null;
-let routeLine=null;
-let routeCoords=[];
-let isRoute=false;
-
-let destination=null;
-let alertRadius=500;
-let alertTriggered=false;
-
+let marker=null, watchId=null, intervalId=null;
+let routeCoords=[], routeLine=null, isRoute=false;
+let destination=null, destinationMarker=null;
+let alertRadius=500, alertTriggered=false;
+let isPinMode=false;
 let currentPosition={};
 let history = JSON.parse(localStorage.getItem("history") || "[]");
+
+// GET LOCATION
+function getCurrentLocation(){
+  navigator.geolocation.getCurrentPosition(updateUI, handleError, {
+    enableHighAccuracy:true
+  });
+}
 
 // TRACKING
 function toggleTracking(el){
@@ -88,9 +148,9 @@ function toggleTracking(el){
 }
 
 function startTracking(){
-  let interval = document.getElementById("interval").value*1000;
+  let interval = intervalInput();
 
-  watchId = navigator.geolocation.watchPosition(updateUI);
+  watchId = navigator.geolocation.watchPosition(updateUI, handleError);
 
   intervalId = setInterval(()=>{
     navigator.geolocation.getCurrentPosition(updateUI);
@@ -102,42 +162,61 @@ function stopTracking(){
   clearInterval(intervalId);
 }
 
+function intervalInput(){
+  return document.getElementById("interval").value*1000;
+}
+
 // ROUTE
 function toggleRoute(el){
   isRoute = el.checked;
 }
 
-// DESTINATION
-function setDestination(){
-  let lat = parseFloat(destLat.value);
-  let lng = parseFloat(destLng.value);
-
-  alertRadius = parseInt(radius.value);
-
-  destination = {lat, lng};
-  alertTriggered=false;
-
-  L.marker([lat,lng]).addTo(map)
-    .bindPopup("🎯 Destination")
-    .openPopup();
+// PIN MODE
+function enablePinMode(){
+  isPinMode = true;
+  alert("Tap on map to select destination");
 }
 
-// DISTANCE
-function getDistance(lat1, lon1, lat2, lon2){
-  const R = 6371e3;
-  const toRad = x=>x*Math.PI/180;
+// MAP CLICK
+map.on("click", function(e){
 
-  let dLat = toRad(lat2-lat1);
-  let dLon = toRad(lon2-lon1);
+  if(!isPinMode) return;
 
-  let a =
-    Math.sin(dLat/2)**2 +
-    Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*
-    Math.sin(dLon/2)**2;
+  let lat = e.latlng.lat;
+  let lng = e.latlng.lng;
 
-  let c = 2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+  destLat.value = lat;
+  destLng.value = lng;
 
-  return R*c;
+  if(destinationMarker) map.removeLayer(destinationMarker);
+
+  destinationMarker = L.marker([lat,lng]).addTo(map)
+    .bindPopup("Destination Selected")
+    .openPopup();
+
+  isPinMode=false;
+});
+
+// SET DESTINATION
+function setDestination(){
+
+  let lat=parseFloat(destLat.value);
+  let lng=parseFloat(destLng.value);
+
+  if(!lat || !lng){
+    alert("Select destination first");
+    return;
+  }
+
+  alertRadius=parseInt(radius.value);
+  destination={lat,lng};
+  alertTriggered=false;
+
+  if(destinationMarker) map.removeLayer(destinationMarker);
+
+  destinationMarker = L.marker([lat,lng]).addTo(map)
+    .bindPopup("🎯 Active Destination")
+    .openPopup();
 }
 
 // UPDATE UI
@@ -145,115 +224,110 @@ function updateUI(pos){
 
   let {latitude, longitude, accuracy} = pos.coords;
 
-  currentPosition = {
-    lat: latitude,
-    lng: longitude,
-    time: new Date().toLocaleString()
-  };
+  currentPosition = {lat:latitude,lng:longitude,time:new Date().toLocaleString()};
 
-  document.getElementById("coords").innerHTML =
-    `Lat: ${latitude.toFixed(6)} | Lng: ${longitude.toFixed(6)} | Accuracy: ${accuracy.toFixed(0)}m`;
+  coords.innerHTML = `
+  Lat: ${latitude.toFixed(6)}<br>
+  Lng: ${longitude.toFixed(6)}<br>
+  Accuracy: ${accuracy.toFixed(0)}m`;
 
   if(marker) map.removeLayer(marker);
-  marker = L.marker([latitude,longitude]).addTo(map);
+  marker=L.marker([latitude,longitude]).addTo(map);
   map.setView([latitude,longitude],16);
 
   // ROUTE
   if(isRoute){
-    let point=[latitude,longitude];
+    let p=[latitude,longitude];
 
     if(routeCoords.length>0){
-      let last=routeCoords[routeCoords.length-1];
-      let dist = map.distance(last, point);
-      if(dist<5) return;
+      let last=routeCoords.at(-1);
+      if(map.distance(last,p)<5) return;
     }
 
-    routeCoords.push(point);
+    routeCoords.push(p);
 
     if(routeLine) map.removeLayer(routeLine);
-    routeLine = L.polyline(routeCoords,{color:'blue'}).addTo(map);
+    routeLine=L.polyline(routeCoords,{color:'blue'}).addTo(map);
   }
 
-  // DESTINATION ALERT
+  // ALERT
   if(destination && !alertTriggered){
 
-    let dist = getDistance(
-      latitude, longitude,
-      destination.lat, destination.lng
-    );
+    let d = distance(latitude,longitude,destination.lat,destination.lng);
 
-    document.getElementById("coords").innerHTML +=
-      `<br>Distance: ${dist.toFixed(0)} m`;
+    coords.innerHTML += `<br>Distance: ${d.toFixed(0)}m`;
 
-    if(dist <= alertRadius){
+    if(d<=alertRadius){
       triggerAlarm();
       alertTriggered=true;
     }
   }
 }
 
+// DISTANCE
+function distance(lat1,lon1,lat2,lon2){
+  const R=6371e3;
+  const toRad=x=>x*Math.PI/180;
+
+  let dLat=toRad(lat2-lat1);
+  let dLon=toRad(lon2-lon1);
+
+  let a=Math.sin(dLat/2)**2+
+    Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*
+    Math.sin(dLon/2)**2;
+
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
 // ALARM
 function triggerAlarm(){
 
-  let audio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
-  audio.play();
+  new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg").play();
 
   if(navigator.vibrate){
     navigator.vibrate([500,200,500]);
   }
 
-  if(Notification.permission==="granted"){
-    new Notification("🚨 Destination Reached",{
-      body:"You are near your stop"
-    });
-  }else{
-    Notification.requestPermission();
-  }
-
-  alert("🚨 You are near destination!");
+  alert("🚨 You reached near destination!");
 }
 
 // SAVE
 function saveLocation(){
-  let remark = prompt("Remark:");
-  let data = {...currentPosition, remark};
-
-  history.push(data);
-  localStorage.setItem("history", JSON.stringify(history));
+  let r=prompt("Remark:");
+  history.push({...currentPosition,remark:r});
+  localStorage.setItem("history",JSON.stringify(history));
 }
 
 // EXPORT
 function exportCSV(){
   let csv="Lat,Lng,Remark,Time\n";
-  history.forEach(h=>{
-    csv+=`${h.lat},${h.lng},${h.remark},${h.time}\n`;
-  });
-
+  history.forEach(h=>csv+=`${h.lat},${h.lng},${h.remark},${h.time}\n`);
   download(csv,"locations.csv");
 }
 
 function exportRoute(){
   let csv="Lat,Lng\n";
-  routeCoords.forEach(p=>{
-    csv+=`${p[0]},${p[1]}\n`;
-  });
-
+  routeCoords.forEach(p=>csv+=`${p[0]},${p[1]}\n`);
   download(csv,"route.csv");
 }
 
 function download(data,name){
-  let blob=new Blob([data]);
   let a=document.createElement("a");
-  a.href=URL.createObjectURL(blob);
+  a.href=URL.createObjectURL(new Blob([data]));
   a.download=name;
   a.click();
 }
 
-// MAP CLICK AUTO FILL
-map.on("click",function(e){
-  destLat.value = e.latlng.lat;
-  destLng.value = e.latlng.lng;
-});
+// CLEAR ROUTE
+function clearRoute(){
+  routeCoords=[];
+  if(routeLine) map.removeLayer(routeLine);
+}
+
+// ERROR
+function handleError(e){
+  coords.innerHTML="Error: "+e.message;
+}
 
 </script>
 
