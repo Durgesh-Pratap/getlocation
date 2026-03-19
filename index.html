@@ -3,20 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GeoPulse | Search & Survey</title>
+    <title>GeoPulse | Core Tracker</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
     
     <style>
         :root {
-            --primary: #6366f1; --bg: #0f172a; --card: rgba(30, 41, 59, 0.7);
-            --text: #f8fafc; --accent: #22d3ee; --nav: #fbbf24; --ruler: #ec4899;
+            --primary: #2563eb; --bg: #f8fafc; --card: #ffffff;
+            --text: #1e293b; --accent: #0ea5e9; --border: #e2e8f0;
         }
 
         [data-theme="night"] {
-            --primary: #991b1b; --bg: #000000; --card: #120000;
-            --text: #ff4444; --accent: #ff0000; --nav: #ff0000; --ruler: #ff00ff;
+            --primary: #ef4444; --bg: #000000; --card: #111111;
+            --text: #ffffff; --accent: #ff0000; --border: #333333;
         }
 
         body {
@@ -25,86 +25,90 @@
             display: flex; flex-direction: column; height: 100vh; overflow: hidden;
         }
 
+        /* Top Header */
         header {
-            background: rgba(0,0,0,0.9); padding: 10px 20px;
-            display: flex; justify-content: space-between; align-items: center;
-            border-bottom: 1px solid rgba(255,255,255,0.1); z-index: 1000;
+            background: #1e293b; color: white; padding: 10px 20px;
+            display: flex; justify-content: space-between; align-items: center; z-index: 1000;
         }
 
-        .main-layout { display: grid; grid-template-columns: 360px 1fr; height: calc(100vh - 50px); }
+        .main-layout { display: grid; grid-template-columns: 360px 1fr; height: calc(100vh - 45px); }
 
         .sidebar {
             padding: 15px; overflow-y: auto; background: var(--bg);
-            border-right: 1px solid rgba(255,255,255,0.1);
+            border-right: 1px solid var(--border);
             display: flex; flex-direction: column; gap: 12px;
         }
 
-        .card { background: var(--card); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 14px; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 
-        /* SEARCH BAR GADGET */
-        .search-container { position: relative; margin-bottom: 5px; }
-        #searchInput {
-            width: 100%; padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);
-            background: rgba(0,0,0,0.4); color: var(--text); font-size: 14px; box-sizing: border-box;
-        }
-        #searchResults {
-            position: absolute; width: 100%; background: #1e293b; border-radius: 0 0 8px 8px;
-            z-index: 2000; max-height: 200px; overflow-y: auto; box-shadow: 0 10px 15px rgba(0,0,0,0.5);
-        }
-        .search-item { padding: 10px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 12px; }
-        .search-item:hover { background: var(--primary); color: white; }
+        /* CORE TELEMETRY GADGET */
+        .telemetry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+        .data-point { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 600; color: var(--primary); }
+        .label { font-size: 10px; text-transform: uppercase; opacity: 0.6; font-weight: 600; }
 
-        /* UI ELEMENTS */
-        button { cursor: pointer; border: none; border-radius: 8px; padding: 10px; font-weight: 600; color: white; transition: 0.2s; width: 100%; margin-bottom: 5px; }
-        .btn-blue { background: var(--primary); }
-        .btn-gold { background: var(--nav); color: black; }
-        .btn-ruler { background: var(--ruler); }
+        /* INPUTS & BUTTONS */
+        input[type="text"] {
+            width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border);
+            margin-bottom: 8px; background: var(--card); color: var(--text); box-sizing: border-box;
+        }
+        button { cursor: pointer; border: none; border-radius: 6px; padding: 10px; font-weight: 600; transition: 0.2s; width: 100%; margin-top: 5px; }
+        .btn-main { background: var(--primary); color: white; }
+        .btn-outline { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
+        .btn-share { background: #16a34a; color: white; font-size: 12px; }
 
         #map { width: 100%; height: 100%; }
-        [data-theme="night"] #map { filter: invert(100%) hue-rotate(180deg) brightness(0.7); }
+        [data-theme="night"] #map { filter: invert(100%) hue-rotate(180deg) brightness(0.8); }
 
-        .metric { font-family: 'JetBrains Mono', monospace; font-size: 18px; color: var(--accent); }
-        .label { font-size: 9px; text-transform: uppercase; opacity: 0.7; letter-spacing: 1px; }
+        #historyList { max-height: 150px; overflow-y: auto; border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
+        .history-item { font-size: 11px; padding: 6px; border-bottom: 1px solid var(--border); }
     </style>
 </head>
 <body data-theme="day">
 
 <header>
-    <span>📡 GEOPULSE COMMAND</span>
-    <button onclick="toggleNightMode()" style="background:none; border:1px solid var(--text); color:var(--text); padding:4px 10px; border-radius:5px; cursor:pointer;">🌓 Toggle Night</button>
+    <span style="font-weight:bold">📍 GEOPULSE CORE</span>
+    <div style="display:flex; gap:10px;">
+        <button onclick="toggleNightMode()" style="width:auto; padding:4px 10px; font-size:11px; background:rgba(255,255,255,0.1); color:white;">🌓 Night Mode</button>
+    </div>
 </header>
 
 <div class="main-layout">
     <div class="sidebar">
         
-        <div class="search-container">
-            <input type="text" id="searchInput" placeholder="🔍 Search location..." onkeyup="searchLocation(this.value)">
-            <div id="searchResults"></div>
-        </div>
-
-        <div id="rulerHud" class="card" style="display:none; border: 2px solid var(--ruler);">
-            <div class="label" style="color: var(--ruler)">📏 Ruler Distance</div>
-            <div id="rulerDist" class="metric" style="color: var(--ruler)">0.00 m</div>
-            <button onclick="clearRuler()" style="background:rgba(255,255,255,0.1); font-size:10px; margin-top:5px;">Clear Measurements</button>
+        <div class="card">
+            <div class="label" style="margin-bottom:8px">Live Telemetry</div>
+            <div class="telemetry-grid">
+                <div><div class="label">Latitude</div><div id="lat" class="data-point">0.000000</div></div>
+                <div><div class="label">Longitude</div><div id="lng" class="data-point">0.000000</div></div>
+                <div><div class="label">Altitude</div><div id="alt" class="data-point">-- m</div></div>
+                <div><div class="label">Accuracy</div><div id="acc" class="data-point">-- m</div></div>
+            </div>
+            <button class="btn-main" onclick="toggleTracking(this)" id="trackBtn">Start GPS Feed</button>
         </div>
 
         <div class="card">
-            <button class="btn-blue" onclick="toggleTracking(this)" id="trackBtn">Initialize GPS</button>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                <button class="btn-gold" onclick="enablePinMode()">🎯 Target</button>
-                <button class="btn-ruler" onclick="enableRulerMode()">📏 Ruler</button>
+            <div class="label">Annotate & Share</div>
+            <input type="text" id="remarkInput" placeholder="Enter remark (e.g. Campsite A)">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px">
+                <button class="btn-outline" onclick="captureLocation()">💾 Save Point</button>
+                <button class="btn-share" onclick="shareLocation()">🔗 Share Link</button>
             </div>
         </div>
 
-        <div class="card" id="navHud" style="display:none;">
-            <div style="display:flex; justify-content: space-between;">
-                <div><div class="label">To Target</div><div id="navDist" class="metric">--</div></div>
-                <div style="text-align:right"><div class="label">ETA</div><div id="eta" style="font-weight:bold; color:var(--nav)">--</div></div>
+        <div class="card">
+            <div class="label">Tools</div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px">
+                <button onclick="enablePinMode()" style="font-size:11px; background:#f59e0b; color:white">🎯 Nav Target</button>
+                <button onclick="enableRulerMode()" style="font-size:11px; background:#ec4899; color:white">📏 Map Ruler</button>
             </div>
         </div>
 
-        <div class="card" style="font-size: 10px; opacity: 0.5;">
-            LAT: <span id="curLat">--</span> | LNG: <span id="curLng">--</span>
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center">
+                <div class="label">Location History</div>
+                <button onclick="exportCSV()" style="width:auto; padding:0; background:none; color:var(--primary); font-size:10px">EXPORT CSV</button>
+            </div>
+            <div id="historyList"></div>
         </div>
     </div>
 
@@ -115,98 +119,109 @@
 
 <script>
     let map = L.map('map', {zoomControl: false}).setView([20,78], 5);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-    let marker, destMarker, watchId, destination;
-    let rulerPoints = [], rulerLine, rulerMarkers = [];
-    let isTracking = false, isPinMode = false, isRulerMode = false;
+    let marker, watchId, currentPos = null;
+    let history = JSON.parse(localStorage.getItem("geopulse_basic_logs") || "[]");
+    
+    // Other tool states
+    let isPinMode = false, isRulerMode = false, rulerPoints = [], rulerLine = null;
 
-    // --- SEARCH LOGIC ---
-    let searchTimeout;
-    async function searchLocation(query) {
-        clearTimeout(searchTimeout);
-        const resultsBox = document.getElementById('searchResults');
-        if (query.length < 3) { resultsBox.innerHTML = ''; return; }
+    renderHistory();
 
-        searchTimeout = setTimeout(async () => {
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}`);
-            const data = await res.json();
-            resultsBox.innerHTML = data.map(item => `
-                <div class="search-item" onclick="goTo('${item.lat}', '${item.lon}', '${item.display_name.replace(/'/g, "\\'")}')">
-                    ${item.display_name}
-                </div>
-            `).join('');
-        }, 500);
-    }
-
-    function goTo(lat, lon, name) {
-        const coords = [parseFloat(lat), parseFloat(lon)];
-        map.flyTo(coords, 14);
-        L.popup().setLatLng(coords).setContent(name).openOn(map);
-        document.getElementById('searchResults').innerHTML = '';
-        document.getElementById('searchInput').value = '';
-    }
-
-    // --- GPS & TELEMETRY ---
+    // --- CORE: CAPTURE & TRACK ---
     function toggleTracking(btn) {
-        if(!isTracking) {
-            isTracking = true; btn.innerText = "Disable GPS"; btn.style.background = "#ef4444";
-            watchId = navigator.geolocation.watchPosition(updateUI, null, {enableHighAccuracy: true});
+        if(btn.innerText.includes("Start")) {
+            btn.innerText = "Stop Tracking";
+            btn.style.background = "#ef4444";
+            watchId = navigator.geolocation.watchPosition(updateUI, handleError, {enableHighAccuracy: true});
         } else {
-            isTracking = false; btn.innerText = "Initialize GPS"; btn.style.background = "var(--primary)";
+            btn.innerText = "Start GPS Feed";
+            btn.style.background = "var(--primary)";
             navigator.geolocation.clearWatch(watchId);
         }
     }
 
     function updateUI(pos) {
-        const { latitude, longitude, speed } = pos.coords;
-        document.getElementById('curLat').innerText = latitude.toFixed(4);
-        document.getElementById('curLng').innerText = longitude.toFixed(4);
-        if (!marker) marker = L.circleMarker([latitude, longitude], { radius: 6, color: 'var(--accent)', fillOpacity: 1 }).addTo(map);
+        const { latitude, longitude, altitude, accuracy } = pos.coords;
+        currentPos = { lat: latitude, lng: longitude, alt: altitude };
+
+        document.getElementById('lat').innerText = latitude.toFixed(6);
+        document.getElementById('lng').innerText = longitude.toFixed(6);
+        document.getElementById('alt').innerText = altitude ? altitude.toFixed(1) + " m" : "N/A";
+        document.getElementById('acc').innerText = "± " + accuracy.toFixed(0) + " m";
+
+        if (!marker) marker = L.marker([latitude, longitude]).addTo(map);
         else marker.setLatLng([latitude, longitude]);
-        
-        if (destination) {
-            const dist = calcDist(latitude, longitude, destination.lat, destination.lng);
-            document.getElementById('navDist').innerText = dist > 1000 ? (dist/1000).toFixed(1)+"km" : Math.round(dist)+"m";
-            const time = speed > 0.5 ? dist/speed : 0;
-            document.getElementById('eta').innerText = time > 0 ? Math.round(time/60)+"m" : "WAITING";
-        }
+        map.panTo([latitude, longitude]);
     }
 
-    // --- RULER & TOOLS ---
-    function enableRulerMode() { isRulerMode = true; isPinMode = false; document.getElementById('rulerHud').style.display = 'block'; }
-    function enablePinMode() { isPinMode = true; isRulerMode = false; document.getElementById('rulerHud').style.display = 'none'; }
-    function clearRuler() { 
-        rulerPoints = []; rulerMarkers.forEach(m => map.removeLayer(m)); 
-        if(rulerLine) map.removeLayer(rulerLine); document.getElementById('rulerDist').innerText = "0.00 m"; 
+    // --- CORE: SAVE & EXPORT ---
+    function captureLocation() {
+        if(!currentPos) return alert("Wait for GPS signal...");
+        const remark = document.getElementById('remarkInput').value || "No remark";
+        const entry = { 
+            time: new Date().toLocaleString(), 
+            lat: currentPos.lat.toFixed(6), 
+            lng: currentPos.lng.toFixed(6), 
+            alt: currentPos.alt || "N/A", 
+            remark 
+        };
+        history.unshift(entry);
+        localStorage.setItem("geopulse_basic_logs", JSON.stringify(history));
+        document.getElementById('remarkInput').value = "";
+        renderHistory();
     }
+
+    function shareLocation() {
+        if(!currentPos) return alert("No location to share.");
+        const url = `https://www.google.com/maps?q=${currentPos.lat},${currentPos.lng}`;
+        navigator.clipboard.writeText(url);
+        alert("Google Maps link copied to clipboard!");
+    }
+
+    function renderHistory() {
+        const list = document.getElementById('historyList');
+        list.innerHTML = history.map(h => `
+            <div class="history-item">
+                <strong>${h.remark}</strong><br>
+                <span style="opacity:0.6">${h.time}</span><br>
+                <code>${h.lat}, ${h.lng}</code>
+            </div>
+        `).join('');
+    }
+
+    function exportCSV() {
+        let csv = "Time,Remark,Lat,Lng,Alt\n" + history.map(h => `"${h.time}","${h.remark}",${h.lat},${h.lng},${h.alt}`).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'location_history.csv';
+        a.click();
+    }
+
+    // --- ENHANCEMENTS: TOOLS ---
+    function enablePinMode() { isPinMode = true; alert("Click map to set navigation target"); }
+    function enableRulerMode() { isRulerMode = true; alert("Click points to measure distance"); }
 
     map.on('click', (e) => {
+        if(isPinMode) {
+            L.marker(e.latlng, {icon: L.divIcon({className: 'target-icon', html: '🎯'})}).addTo(map);
+            isPinMode = false;
+        }
         if(isRulerMode) {
             rulerPoints.push(e.latlng);
-            rulerMarkers.push(L.circleMarker(e.latlng, {radius: 4, color: 'var(--ruler)'}).addTo(map));
-            if(rulerPoints.length > 1) {
-                if(rulerLine) map.removeLayer(rulerLine);
-                rulerLine = L.polyline(rulerPoints, {color: 'var(--ruler)', dashArray: '5, 10'}).addTo(map);
-                let d = 0; for(let i=0; i<rulerPoints.length-1; i++) d += calcDist(rulerPoints[i].lat, rulerPoints[i].lng, rulerPoints[i+1].lat, rulerPoints[i+1].lng);
-                document.getElementById('rulerDist').innerText = d > 1000 ? (d/1000).toFixed(2)+" km" : d.toFixed(1)+" m";
-            }
-        }
-        if(isPinMode) {
-            destination = { lat: e.latlng.lat, lng: e.latlng.lng };
-            if(destMarker) map.removeLayer(destMarker);
-            destMarker = L.circle(e.latlng, {radius: 100, color: 'var(--nav)'}).addTo(map);
-            document.getElementById('navHud').style.display = 'block';
+            if(rulerLine) map.removeLayer(rulerLine);
+            rulerLine = L.polyline(rulerPoints, {color: 'red'}).addTo(map);
         }
     });
 
-    function toggleNightMode() { document.body.setAttribute('data-theme', document.body.getAttribute('data-theme') === 'day' ? 'night' : 'day'); }
-    function calcDist(lat1, lon1, lat2, lon2) {
-        const R = 6371e3;
-        const dLat = (lat2-lat1) * Math.PI/180; const dLon = (lon2-lon1) * Math.PI/180;
-        const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    function toggleNightMode() {
+        document.body.setAttribute('data-theme', document.body.getAttribute('data-theme') === 'day' ? 'night' : 'day');
     }
+
+    function handleError(e) { alert("GPS Error: " + e.message); }
 </script>
+
 </body>
 </html>
