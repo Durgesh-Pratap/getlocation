@@ -2,21 +2,22 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GeoPulse | Core Tracker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GeoPulse Tracker</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
     
     <style>
         :root {
-            --primary: #2563eb; --bg: #f8fafc; --card: #ffffff;
-            --text: #1e293b; --accent: #0ea5e9; --border: #e2e8f0;
+            --primary: #2563eb; --bg: #0f172a; --card: #1e293b;
+            --text: #f8fafc; --accent: #38bdf8; --border: #334155;
+            --danger: #ef4444; --success: #22c55e; --warning: #f59e0b;
         }
 
         [data-theme="night"] {
-            --primary: #ef4444; --bg: #000000; --card: #111111;
-            --text: #ffffff; --accent: #ff0000; --border: #333333;
+            --primary: #991b1b; --bg: #000000; --card: #0a0a0a;
+            --text: #ff4444; --accent: #ff0000; --border: #220000;
         }
 
         body {
@@ -25,90 +26,120 @@
             display: flex; flex-direction: column; height: 100vh; overflow: hidden;
         }
 
-        /* Top Header */
         header {
-            background: #1e293b; color: white; padding: 10px 20px;
-            display: flex; justify-content: space-between; align-items: center; z-index: 1000;
+            background: #020617; color: white; padding: 10px 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 2px solid var(--border); z-index: 1000;
         }
 
-        .main-layout { display: grid; grid-template-columns: 360px 1fr; height: calc(100vh - 45px); }
+        .main-layout { display: grid; grid-template-columns: 380px 1fr; height: calc(100vh - 45px); }
 
         .sidebar {
             padding: 15px; overflow-y: auto; background: var(--bg);
-            border-right: 1px solid var(--border);
-            display: flex; flex-direction: column; gap: 12px;
+            border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px;
         }
 
-        .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-
-        /* CORE TELEMETRY GADGET */
-        .telemetry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-        .data-point { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 600; color: var(--primary); }
-        .label { font-size: 10px; text-transform: uppercase; opacity: 0.6; font-weight: 600; }
-
-        /* INPUTS & BUTTONS */
-        input[type="text"] {
-            width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border);
-            margin-bottom: 8px; background: var(--card); color: var(--text); box-sizing: border-box;
+        .card { 
+            background: var(--card); border: 1px solid var(--border); 
+            border-radius: 8px; padding: 14px; 
         }
-        button { cursor: pointer; border: none; border-radius: 6px; padding: 10px; font-weight: 600; transition: 0.2s; width: 100%; margin-top: 5px; }
-        .btn-main { background: var(--primary); color: white; }
-        .btn-outline { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
-        .btn-share { background: #16a34a; color: white; font-size: 12px; }
 
-        #map { width: 100%; height: 100%; }
-        [data-theme="night"] #map { filter: invert(100%) hue-rotate(180deg) brightness(0.8); }
+        /* TELEMETRY HUD */
+        .telemetry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .data-point { font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 500; color: var(--accent); }
+        .label { font-size: 9px; text-transform: uppercase; opacity: 0.6; font-weight: 700; letter-spacing: 0.5px; }
 
-        #historyList { max-height: 150px; overflow-y: auto; border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
-        .history-item { font-size: 11px; padding: 6px; border-bottom: 1px solid var(--border); }
+        /* ALARM SYSTEM UI */
+        #alarmActiveCard { 
+            display: none; border: 2px solid var(--danger); 
+            background: rgba(239, 68, 68, 0.1); text-align: center;
+        }
+        .dist-focus { font-family: 'JetBrains Mono', monospace; font-size: 28px; color: var(--danger); font-weight: 700; }
+
+        /* BUTTONS - SHARP & CLEAR */
+        button { 
+            cursor: pointer; border: none; border-radius: 4px; padding: 12px; 
+            font-weight: 700; text-transform: uppercase; font-size: 12px; 
+            transition: 0.1s; width: 100%; margin-top: 5px;
+        }
+        .btn-blue { background: var(--primary); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-warning { background: var(--warning); color: black; }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+        
+        input { 
+            width: 100%; padding: 10px; border-radius: 4px; border: 1px solid var(--border);
+            background: #020617; color: white; font-family: 'JetBrains Mono', monospace;
+            box-sizing: border-box; margin: 5px 0;
+        }
+
+        /* FULL SCREEN ALARM OVERLAY */
+        #criticalOverlay {
+            position: fixed; inset: 0; background: var(--danger); z-index: 9999;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            animation: pulse-bg 0.4s infinite alternate;
+        }
+        @keyframes pulse-bg { from { background: #991b1b; } to { background: #ef4444; } }
+
+        #map { width: 100%; height: 100%; filter: brightness(0.8) contrast(1.2); }
+
+        @media (max-width: 768px) {
+            .main-layout { grid-template-columns: 1fr; }
+            #map { height: 40vh; }
+            .sidebar { height: 60vh; border-right: none; border-top: 2px solid var(--border); }
+        }
     </style>
 </head>
 <body data-theme="day">
 
+<div id="criticalOverlay">
+    <h1 style="font-size: 3rem; margin: 0;">PROXIMITY ALERT</h1>
+    <p id="overlayDistText" style="font-size: 1.5rem; font-family: 'JetBrains Mono';">DISTANCE: 0m</p>
+    <button onclick="killAlarm()" style="width: 250px; background: white; color: black; font-size: 1.5rem;">SILENCE</button>
+</div>
+
 <header>
-    <span style="font-weight:bold">📍 GEOPULSE CORE</span>
-    <div style="display:flex; gap:10px;">
-        <button onclick="toggleNightMode()" style="width:auto; padding:4px 10px; font-size:11px; background:rgba(255,255,255,0.1); color:white;">🌓 Night Mode</button>
-    </div>
+    <span style="letter-spacing: 2px; font-weight: 700;">GEOPULSE // PRO</span>
+    <button onclick="toggleNight()" style="width:auto; padding:5px 15px; font-size:10px;" class="btn-outline">THEME TOGGLE</button>
 </header>
 
 <div class="main-layout">
     <div class="sidebar">
         
         <div class="card">
-            <div class="label" style="margin-bottom:8px">Live Telemetry</div>
             <div class="telemetry-grid">
                 <div><div class="label">Latitude</div><div id="lat" class="data-point">0.000000</div></div>
                 <div><div class="label">Longitude</div><div id="lng" class="data-point">0.000000</div></div>
-                <div><div class="label">Altitude</div><div id="alt" class="data-point">-- m</div></div>
-                <div><div class="label">Accuracy</div><div id="acc" class="data-point">-- m</div></div>
+                <div><div class="label">Altitude</div><div id="alt" class="data-point">-- M</div></div>
+                <div><div class="label">Accuracy</div><div id="acc" class="data-point">-- M</div></div>
             </div>
-            <button class="btn-main" onclick="toggleTracking(this)" id="trackBtn">Start GPS Feed</button>
+            <button class="btn-blue" onclick="handleTracking(this)" id="mainTrackBtn">INITIALIZE GPS FEED</button>
         </div>
 
         <div class="card">
-            <div class="label">Annotate & Share</div>
-            <input type="text" id="remarkInput" placeholder="Enter remark (e.g. Campsite A)">
+            <div class="label">Alarm Parameters</div>
+            <input type="number" id="alarmRadius" value="500" placeholder="Set Radius (Meters)">
+            <button class="btn-warning" onclick="startPinning()">SET TARGET ON MAP</button>
+            
+            <div id="alarmActiveCard" class="card" style="margin-top:10px">
+                <div class="label" style="color:var(--danger)">Closing Distance</div>
+                <div id="liveDist" class="dist-focus">--- M</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="label">Data Capture</div>
+            <input type="text" id="remark" placeholder="Remark / Waypoint Name">
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px">
-                <button class="btn-outline" onclick="captureLocation()">💾 Save Point</button>
-                <button class="btn-share" onclick="shareLocation()">🔗 Share Link</button>
+                <button class="btn-outline" onclick="logPosition()">SAVE SPOT</button>
+                <button class="btn-outline" onclick="copyShareLink()">SHARE LINK</button>
             </div>
+            <button class="btn-outline" style="border-color: var(--success); color: var(--success); margin-top:10px" onclick="downloadData()">EXPORT CSV HISTORY</button>
         </div>
 
-        <div class="card">
-            <div class="label">Tools</div>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px">
-                <button onclick="enablePinMode()" style="font-size:11px; background:#f59e0b; color:white">🎯 Nav Target</button>
-                <button onclick="enableRulerMode()" style="font-size:11px; background:#ec4899; color:white">📏 Map Ruler</button>
-            </div>
-        </div>
-
-        <div class="card">
-            <div style="display:flex; justify-content:space-between; align-items:center">
-                <div class="label">Location History</div>
-                <button onclick="exportCSV()" style="width:auto; padding:0; background:none; color:var(--primary); font-size:10px">EXPORT CSV</button>
-            </div>
-            <div id="historyList"></div>
+        <div class="card" style="flex-grow: 1;">
+            <div class="label">System Logs</div>
+            <div id="logStream" style="font-size: 10px; font-family: 'JetBrains Mono'; margin-top: 10px; opacity: 0.8;"></div>
         </div>
     </div>
 
@@ -118,109 +149,152 @@
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
+    // System Init
     let map = L.map('map', {zoomControl: false}).setView([20,78], 5);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
-    let marker, watchId, currentPos = null;
-    let history = JSON.parse(localStorage.getItem("geopulse_basic_logs") || "[]");
+    let marker, watchId, targetPoint = null, targetCircle = null;
+    let isPinning = false, isAlarmArmed = false;
+    let history = JSON.parse(localStorage.getItem("gp_history_final") || "[]");
     
-    // Other tool states
-    let isPinMode = false, isRulerMode = false, rulerPoints = [], rulerLine = null;
+    const alarmBeep = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
+    alarmBeep.loop = true;
 
-    renderHistory();
+    refreshLogs();
 
-    // --- CORE: CAPTURE & TRACK ---
-    function toggleTracking(btn) {
-        if(btn.innerText.includes("Start")) {
-            btn.innerText = "Stop Tracking";
-            btn.style.background = "#ef4444";
-            watchId = navigator.geolocation.watchPosition(updateUI, handleError, {enableHighAccuracy: true});
+    function handleTracking(btn) {
+        if(!watchId) {
+            btn.innerText = "TERMINATE GPS FEED";
+            btn.className = "btn-danger";
+            watchId = navigator.geolocation.watchPosition(updateTelemetry, console.error, {
+                enableHighAccuracy: true,
+                maximumAge: 0
+            });
         } else {
-            btn.innerText = "Start GPS Feed";
-            btn.style.background = "var(--primary)";
+            btn.innerText = "INITIALIZE GPS FEED";
+            btn.className = "btn-blue";
             navigator.geolocation.clearWatch(watchId);
+            watchId = null;
         }
     }
 
-    function updateUI(pos) {
+    function updateTelemetry(pos) {
         const { latitude, longitude, altitude, accuracy } = pos.coords;
-        currentPos = { lat: latitude, lng: longitude, alt: altitude };
-
+        
+        // Update Displays
         document.getElementById('lat').innerText = latitude.toFixed(6);
         document.getElementById('lng').innerText = longitude.toFixed(6);
-        document.getElementById('alt').innerText = altitude ? altitude.toFixed(1) + " m" : "N/A";
-        document.getElementById('acc').innerText = "± " + accuracy.toFixed(0) + " m";
+        document.getElementById('alt').innerText = altitude ? altitude.toFixed(1) + " M" : "N/A";
+        document.getElementById('acc').innerText = "±" + accuracy.toFixed(0) + " M";
 
-        if (!marker) marker = L.marker([latitude, longitude]).addTo(map);
-        else marker.setLatLng([latitude, longitude]);
-        map.panTo([latitude, longitude]);
+        const loc = [latitude, longitude];
+        if (!marker) marker = L.circleMarker(loc, {radius: 7, color: '#38bdf8', fillOpacity: 1}).addTo(map);
+        else marker.setLatLng(loc);
+        map.panTo(loc);
+
+        // Geofencing Check
+        if (targetPoint) {
+            const currentDist = getHaversine(latitude, longitude, targetPoint.lat, targetPoint.lng);
+            const radiusLimit = parseFloat(document.getElementById('alarmRadius').value);
+            
+            document.getElementById('liveDist').innerText = currentDist > 1000 ? (currentDist/1000).toFixed(2) + " KM" : Math.round(currentDist) + " M";
+
+            if (currentDist <= radiusLimit && isAlarmArmed) {
+                fireAlarm(currentDist);
+            }
+        }
     }
 
-    // --- CORE: SAVE & EXPORT ---
-    function captureLocation() {
-        if(!currentPos) return alert("Wait for GPS signal...");
-        const remark = document.getElementById('remarkInput').value || "No remark";
-        const entry = { 
-            time: new Date().toLocaleString(), 
-            lat: currentPos.lat.toFixed(6), 
-            lng: currentPos.lng.toFixed(6), 
-            alt: currentPos.alt || "N/A", 
-            remark 
-        };
-        history.unshift(entry);
-        localStorage.setItem("geopulse_basic_logs", JSON.stringify(history));
-        document.getElementById('remarkInput').value = "";
-        renderHistory();
+    function startPinning() {
+        isPinning = true;
+        alert("System: Select Target Coordinates on the Map.");
     }
 
-    function shareLocation() {
-        if(!currentPos) return alert("No location to share.");
-        const url = `https://www.google.com/maps?q=${currentPos.lat},${currentPos.lng}`;
-        navigator.clipboard.writeText(url);
-        alert("Google Maps link copied to clipboard!");
+    map.on('click', (e) => {
+        if (!isPinning) return;
+        targetPoint = e.latlng;
+        const radius = parseFloat(document.getElementById('alarmRadius').value);
+
+        if (targetCircle) map.removeLayer(targetCircle);
+        targetCircle = L.circle(targetPoint, {
+            radius: radius,
+            color: '#ef4444',
+            weight: 2,
+            fillColor: '#ef4444',
+            fillOpacity: 0.2
+        }).addTo(map);
+
+        document.getElementById('alarmActiveCard').style.display = 'block';
+        isAlarmArmed = true;
+        isPinning = false;
+    });
+
+    function getHaversine(lat1, lon1, lat2, lon2) {
+        const R = 6371e3;
+        const φ1 = lat1 * Math.PI/180;
+        const φ2 = lat2 * Math.PI/180;
+        const Δφ = (lat2-lat1) * Math.PI/180;
+        const Δλ = (lon2-lon1) * Math.PI/180;
+        const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+        return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
     }
 
-    function renderHistory() {
-        const list = document.getElementById('historyList');
-        list.innerHTML = history.map(h => `
-            <div class="history-item">
-                <strong>${h.remark}</strong><br>
-                <span style="opacity:0.6">${h.time}</span><br>
-                <code>${h.lat}, ${h.lng}</code>
+    function fireAlarm(d) {
+        isAlarmArmed = false; // Prevent loop
+        alarmBeep.play();
+        document.getElementById('criticalOverlay').style.display = 'flex';
+        document.getElementById('overlayDistText').innerText = `DISTANCE: ${Math.round(d)}M`;
+        if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]);
+    }
+
+    function killAlarm() {
+        alarmBeep.pause();
+        alarmBeep.currentTime = 0;
+        document.getElementById('criticalOverlay').style.display = 'none';
+        document.getElementById('alarmActiveCard').style.display = 'none';
+        if (targetCircle) map.removeLayer(targetCircle);
+        targetPoint = null;
+    }
+
+    // Capture & Logs
+    function logPosition() {
+        const lat = document.getElementById('lat').innerText;
+        if (lat === "0.000000") return alert("No GPS Fix.");
+        const rem = document.getElementById('remark').value || "Waypoint";
+        history.unshift({time: new Date().toLocaleTimeString(), lat, lng: document.getElementById('lng').innerText, rem});
+        localStorage.setItem("gp_history_final", JSON.stringify(history));
+        document.getElementById('remark').value = "";
+        refreshLogs();
+    }
+
+    function refreshLogs() {
+        document.getElementById('logStream').innerHTML = history.slice(0, 8).map(h => `
+            <div style="border-bottom: 1px solid var(--border); padding: 4px 0;">
+                [${h.time}] ${h.rem}<br><span style="color:var(--accent)">${h.lat}, ${h.lng}</span>
             </div>
         `).join('');
     }
 
-    function exportCSV() {
-        let csv = "Time,Remark,Lat,Lng,Alt\n" + history.map(h => `"${h.time}","${h.remark}",${h.lat},${h.lng},${h.alt}`).join('\n');
+    function copyShareLink() {
+        const lat = document.getElementById('lat').innerText;
+        const lng = document.getElementById('lng').innerText;
+        const url = `https://www.google.com/maps?q=${lat},${lng}`;
+        navigator.clipboard.writeText(url);
+        alert("Location Link Copied.");
+    }
+
+    function downloadData() {
+        let csv = "Time,Remark,Lat,Lng\n" + history.map(h => `${h.time},${h.rem},${h.lat},${h.lng}`).join('\n');
         const blob = new Blob([csv], { type: 'text/csv' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'location_history.csv';
+        a.download = 'geopulse_precision_logs.csv';
         a.click();
     }
 
-    // --- ENHANCEMENTS: TOOLS ---
-    function enablePinMode() { isPinMode = true; alert("Click map to set navigation target"); }
-    function enableRulerMode() { isRulerMode = true; alert("Click points to measure distance"); }
-
-    map.on('click', (e) => {
-        if(isPinMode) {
-            L.marker(e.latlng, {icon: L.divIcon({className: 'target-icon', html: '🎯'})}).addTo(map);
-            isPinMode = false;
-        }
-        if(isRulerMode) {
-            rulerPoints.push(e.latlng);
-            if(rulerLine) map.removeLayer(rulerLine);
-            rulerLine = L.polyline(rulerPoints, {color: 'red'}).addTo(map);
-        }
-    });
-
-    function toggleNightMode() {
+    function toggleNight() {
         document.body.setAttribute('data-theme', document.body.getAttribute('data-theme') === 'day' ? 'night' : 'day');
     }
-
-    function handleError(e) { alert("GPS Error: " + e.message); }
 </script>
 
 </body>
