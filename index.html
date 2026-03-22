@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GeoPulse Tracker</title>
+    <title>GeoPulse Pro | Auto-Focus</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
@@ -12,7 +12,7 @@
         :root {
             --primary: #2563eb; --bg: #0f172a; --card: #1e293b;
             --text: #f8fafc; --accent: #38bdf8; --border: #334155;
-            --danger: #ef4444; --success: #22c55e; --warning: #f59e0b;
+            --danger: #ef4444; --warning: #f59e0b;
         }
 
         [data-theme="night"] {
@@ -39,41 +39,40 @@
             border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px;
         }
 
-        .card { 
-            background: var(--card); border: 1px solid var(--border); 
-            border-radius: 8px; padding: 14px; 
-        }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
 
-        /* TELEMETRY HUD */
+        /* TELEMETRY */
         .telemetry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .data-point { font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 500; color: var(--accent); }
         .label { font-size: 9px; text-transform: uppercase; opacity: 0.6; font-weight: 700; letter-spacing: 0.5px; }
 
-        /* ALARM SYSTEM UI */
-        #alarmActiveCard { 
-            display: none; border: 2px solid var(--danger); 
-            background: rgba(239, 68, 68, 0.1); text-align: center;
-        }
-        .dist-focus { font-family: 'JetBrains Mono', monospace; font-size: 28px; color: var(--danger); font-weight: 700; }
-
-        /* BUTTONS - SHARP & CLEAR */
+        /* BUTTONS */
         button { 
             cursor: pointer; border: none; border-radius: 4px; padding: 12px; 
-            font-weight: 700; text-transform: uppercase; font-size: 12px; 
+            font-weight: 700; text-transform: uppercase; font-size: 11px; 
             transition: 0.1s; width: 100%; margin-top: 5px;
         }
         .btn-blue { background: var(--primary); color: white; }
         .btn-danger { background: var(--danger); color: white; }
-        .btn-warning { background: var(--warning); color: black; }
         .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
         
         input { 
             width: 100%; padding: 10px; border-radius: 4px; border: 1px solid var(--border);
-            background: #020617; color: white; font-family: 'JetBrains Mono', monospace;
-            box-sizing: border-box; margin: 5px 0;
+            background: #020617; color: white; font-family: 'JetBrains Mono', monospace; box-sizing: border-box;
         }
 
-        /* FULL SCREEN ALARM OVERLAY */
+        /* MAP & ZOOM GADGETS */
+        #map { width: 100%; height: 100%; position: relative; }
+        .map-overlay-tools {
+            position: absolute; top: 10px; right: 10px; z-index: 1000;
+            display: flex; flex-direction: column; gap: 5px;
+        }
+        .zoom-btn {
+            width: 40px; height: 40px; background: var(--card); color: var(--text);
+            border: 1px solid var(--border); border-radius: 4px; font-size: 20px;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+        }
+
         #criticalOverlay {
             position: fixed; inset: 0; background: var(--danger); z-index: 9999;
             display: none; flex-direction: column; align-items: center; justify-content: center;
@@ -81,26 +80,24 @@
         }
         @keyframes pulse-bg { from { background: #991b1b; } to { background: #ef4444; } }
 
-        #map { width: 100%; height: 100%; filter: brightness(0.8) contrast(1.2); }
-
         @media (max-width: 768px) {
             .main-layout { grid-template-columns: 1fr; }
-            #map { height: 40vh; }
-            .sidebar { height: 60vh; border-right: none; border-top: 2px solid var(--border); }
+            #map { height: 45vh; }
+            .sidebar { height: 55vh; border-right: none; border-top: 2px solid var(--border); }
         }
     </style>
 </head>
 <body data-theme="day">
 
 <div id="criticalOverlay">
-    <h1 style="font-size: 3rem; margin: 0;">PROXIMITY ALERT</h1>
-    <p id="overlayDistText" style="font-size: 1.5rem; font-family: 'JetBrains Mono';">DISTANCE: 0m</p>
-    <button onclick="killAlarm()" style="width: 250px; background: white; color: black; font-size: 1.5rem;">SILENCE</button>
+    <h1 style="font-size: 2.5rem; margin: 0;">PROXIMITY REACHED</h1>
+    <p id="overlayDistText" style="font-size: 1.5rem; font-family: 'JetBrains Mono';">0M</p>
+    <button onclick="killAlarm()" style="width: 200px; background: white; color: black;">SILENCE</button>
 </div>
 
 <header>
     <span style="letter-spacing: 2px; font-weight: 700;">GEOPULSE // PRO</span>
-    <button onclick="toggleNight()" style="width:auto; padding:5px 15px; font-size:10px;" class="btn-outline">THEME TOGGLE</button>
+    <button onclick="toggleNight()" style="width:auto; padding:5px 15px; font-size:10px;" class="btn-outline">THEME</button>
 </header>
 
 <div class="main-layout">
@@ -108,71 +105,89 @@
         
         <div class="card">
             <div class="telemetry-grid">
-                <div><div class="label">Latitude</div><div id="lat" class="data-point">0.000000</div></div>
-                <div><div class="label">Longitude</div><div id="lng" class="data-point">0.000000</div></div>
+                <div><div class="label">Lat/Lng</div><div id="lat" class="data-point">0.0000</div><div id="lng" class="data-point">0.0000</div></div>
                 <div><div class="label">Altitude</div><div id="alt" class="data-point">-- M</div></div>
                 <div><div class="label">Accuracy</div><div id="acc" class="data-point">-- M</div></div>
+                <div><div class="label">Status</div><div id="status" class="data-point" style="color:var(--warning)">IDLE</div></div>
             </div>
-            <button class="btn-blue" onclick="handleTracking(this)" id="mainTrackBtn">INITIALIZE GPS FEED</button>
+            <button class="btn-blue" onclick="handleTracking(this)" id="mainTrackBtn">INITIALIZE & FOCUS</button>
         </div>
 
         <div class="card">
-            <div class="label">Alarm Parameters</div>
-            <input type="number" id="alarmRadius" value="500" placeholder="Set Radius (Meters)">
-            <button class="btn-warning" onclick="startPinning()">SET TARGET ON MAP</button>
-            
-            <div id="alarmActiveCard" class="card" style="margin-top:10px">
-                <div class="label" style="color:var(--danger)">Closing Distance</div>
-                <div id="liveDist" class="dist-focus">--- M</div>
+            <div class="label">Geofence Alarm (Meters)</div>
+            <input type="number" id="alarmRadius" value="500" onchange="persistSettings()">
+            <button class="btn-outline" style="border-color:var(--warning); color:var(--warning)" onclick="startPinning()">📍 SET TARGET ON MAP</button>
+            <div id="alarmActiveCard" class="card" style="margin-top:10px; display:none; border-color:var(--danger)">
+                <div class="label" style="color:var(--danger)">Distance to Target</div>
+                <div id="liveDist" style="font-family: 'JetBrains Mono'; font-size: 22px; font-weight: 700; color:var(--danger)">--- M</div>
             </div>
         </div>
 
         <div class="card">
-            <div class="label">Data Capture</div>
-            <input type="text" id="remark" placeholder="Remark / Waypoint Name">
+            <input type="text" id="remark" placeholder="Waypoint Name">
+            <button class="btn-blue" style="background:var(--accent); color:black" onclick="logPosition()">SAVE CURRENT SPOT</button>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px">
-                <button class="btn-outline" onclick="logPosition()">SAVE SPOT</button>
-                <button class="btn-outline" onclick="copyShareLink()">SHARE LINK</button>
+                <button class="btn-outline" onclick="copyShareLink()">SHARE</button>
+                <button class="btn-outline" onclick="downloadData()">EXPORT</button>
             </div>
-            <button class="btn-outline" style="border-color: var(--success); color: var(--success); margin-top:10px" onclick="downloadData()">EXPORT CSV HISTORY</button>
         </div>
 
         <div class="card" style="flex-grow: 1;">
-            <div class="label">System Logs</div>
-            <div id="logStream" style="font-size: 10px; font-family: 'JetBrains Mono'; margin-top: 10px; opacity: 0.8;"></div>
+            <div class="label">Saved Logs</div>
+            <div id="logStream" style="font-size: 10px; font-family: 'JetBrains Mono'; margin-top: 8px; opacity: 0.8;"></div>
         </div>
     </div>
 
-    <div id="map"></div>
+    <div id="map">
+        <div class="map-overlay-tools">
+            <div class="zoom-btn" onclick="map.zoomIn()">+</div>
+            <div class="zoom-btn" onclick="map.zoomOut()">−</div>
+            <div class="zoom-btn" onclick="recenterMap()" title="Recenter on Me">🎯</div>
+        </div>
+    </div>
 </div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
-    // System Init
-    let map = L.map('map', {zoomControl: false}).setView([20,78], 5);
+    let map = L.map('map', {zoomControl: false}).setView([20,78], 4);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
     let marker, watchId, targetPoint = null, targetCircle = null;
     let isPinning = false, isAlarmArmed = false;
-    let history = JSON.parse(localStorage.getItem("gp_history_final") || "[]");
-    
+    let firstFix = true; // For automatic zoom-in on first load
+
     const alarmBeep = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
     alarmBeep.loop = true;
 
-    refreshLogs();
+    // Load Persisted Data
+    window.onload = () => {
+        history = JSON.parse(localStorage.getItem("gp_logs") || "[]");
+        refreshLogs();
+        const savedRadius = localStorage.getItem("gp_radius");
+        if(savedRadius) document.getElementById('alarmRadius').value = savedRadius;
+        const savedTarget = JSON.parse(localStorage.getItem("gp_target"));
+        if(savedTarget) {
+            targetPoint = savedTarget;
+            drawTargetCircle(targetPoint);
+            document.getElementById('alarmActiveCard').style.display = 'block';
+            isAlarmArmed = true;
+        }
+    };
 
     function handleTracking(btn) {
         if(!watchId) {
-            btn.innerText = "TERMINATE GPS FEED";
+            btn.innerText = "SHUTDOWN & UNLOCK";
             btn.className = "btn-danger";
-            watchId = navigator.geolocation.watchPosition(updateTelemetry, console.error, {
-                enableHighAccuracy: true,
-                maximumAge: 0
-            });
+            document.getElementById('status').innerText = "TRACKING";
+            document.getElementById('status').style.color = "var(--success)";
+            firstFix = true; // Allow map to snap to current location
+            watchId = navigator.geolocation.watchPosition(updateTelemetry, console.error, {enableHighAccuracy: true});
         } else {
-            btn.innerText = "INITIALIZE GPS FEED";
+            btn.innerText = "INITIALIZE & FOCUS";
             btn.className = "btn-blue";
+            document.getElementById('status').innerText = "IDLE";
+            document.getElementById('status').style.color = "var(--warning)";
             navigator.geolocation.clearWatch(watchId);
             watchId = null;
         }
@@ -180,122 +195,122 @@
 
     function updateTelemetry(pos) {
         const { latitude, longitude, altitude, accuracy } = pos.coords;
-        
-        // Update Displays
-        document.getElementById('lat').innerText = latitude.toFixed(6);
-        document.getElementById('lng').innerText = longitude.toFixed(6);
+        document.getElementById('lat').innerText = latitude.toFixed(5);
+        document.getElementById('lng').innerText = longitude.toFixed(5);
         document.getElementById('alt').innerText = altitude ? altitude.toFixed(1) + " M" : "N/A";
         document.getElementById('acc').innerText = "±" + accuracy.toFixed(0) + " M";
 
         const loc = [latitude, longitude];
-        if (!marker) marker = L.circleMarker(loc, {radius: 7, color: '#38bdf8', fillOpacity: 1}).addTo(map);
+        if (!marker) marker = L.circleMarker(loc, {radius: 8, color: '#38bdf8', fillOpacity: 1, weight: 3}).addTo(map);
         else marker.setLatLng(loc);
-        map.panTo(loc);
 
-        // Geofencing Check
-        if (targetPoint) {
+        // --- AUTOMATIC ZOOM & SNAP ---
+        if(firstFix) {
+            map.setView(loc, 16); // Sharp zoom in on start
+            firstFix = false;
+        } else {
+            map.panTo(loc); // Smoothly follow movement
+        }
+
+        if (targetPoint && isAlarmArmed) {
             const currentDist = getHaversine(latitude, longitude, targetPoint.lat, targetPoint.lng);
             const radiusLimit = parseFloat(document.getElementById('alarmRadius').value);
-            
             document.getElementById('liveDist').innerText = currentDist > 1000 ? (currentDist/1000).toFixed(2) + " KM" : Math.round(currentDist) + " M";
-
-            if (currentDist <= radiusLimit && isAlarmArmed) {
-                fireAlarm(currentDist);
-            }
+            if (currentDist <= radiusLimit) fireAlarm(currentDist);
         }
+    }
+
+    function recenterMap() {
+        if(marker) map.setView(marker.getLatLng(), 16);
     }
 
     function startPinning() {
         isPinning = true;
-        alert("System: Select Target Coordinates on the Map.");
+        alert("Action Required: Tap on the map to set target point.");
     }
 
     map.on('click', (e) => {
         if (!isPinning) return;
         targetPoint = e.latlng;
-        const radius = parseFloat(document.getElementById('alarmRadius').value);
-
-        if (targetCircle) map.removeLayer(targetCircle);
-        targetCircle = L.circle(targetPoint, {
-            radius: radius,
-            color: '#ef4444',
-            weight: 2,
-            fillColor: '#ef4444',
-            fillOpacity: 0.2
-        }).addTo(map);
-
+        localStorage.setItem("gp_target", JSON.stringify(targetPoint));
+        drawTargetCircle(targetPoint);
         document.getElementById('alarmActiveCard').style.display = 'block';
         isAlarmArmed = true;
         isPinning = false;
     });
 
+    function drawTargetCircle(latlng) {
+        const radius = parseFloat(document.getElementById('alarmRadius').value);
+        if (targetCircle) map.removeLayer(targetCircle);
+        targetCircle = L.circle(latlng, {radius: radius, color: '#ef4444', weight: 2, fillColor: '#ef4444', fillOpacity: 0.2}).addTo(map);
+    }
+
     function getHaversine(lat1, lon1, lat2, lon2) {
         const R = 6371e3;
-        const φ1 = lat1 * Math.PI/180;
-        const φ2 = lat2 * Math.PI/180;
-        const Δφ = (lat2-lat1) * Math.PI/180;
-        const Δλ = (lon2-lon1) * Math.PI/180;
-        const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+        const φ1 = lat1 * Math.PI/180; const φ2 = lat2 * Math.PI/180;
+        const Δφ = (lat2-lat1) * Math.PI/180; const Δλ = (lon2-lon1) * Math.PI/180;
+        const a = Math.sin(Δφ/2)**2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2)**2;
         return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
     }
 
     function fireAlarm(d) {
-        isAlarmArmed = false; // Prevent loop
+        isAlarmArmed = false;
         alarmBeep.play();
         document.getElementById('criticalOverlay').style.display = 'flex';
-        document.getElementById('overlayDistText').innerText = `DISTANCE: ${Math.round(d)}M`;
-        if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]);
+        document.getElementById('overlayDistText').innerText = `${Math.round(d)}M`;
+        if (navigator.vibrate) navigator.vibrate([500, 200, 500]);
     }
 
     function killAlarm() {
         alarmBeep.pause();
-        alarmBeep.currentTime = 0;
         document.getElementById('criticalOverlay').style.display = 'none';
         document.getElementById('alarmActiveCard').style.display = 'none';
         if (targetCircle) map.removeLayer(targetCircle);
         targetPoint = null;
+        localStorage.removeItem("gp_target");
     }
 
-    // Capture & Logs
     function logPosition() {
         const lat = document.getElementById('lat').innerText;
-        if (lat === "0.000000") return alert("No GPS Fix.");
+        if (lat === "0.0000") return;
         const rem = document.getElementById('remark').value || "Waypoint";
-        history.unshift({time: new Date().toLocaleTimeString(), lat, lng: document.getElementById('lng').innerText, rem});
-        localStorage.setItem("gp_history_final", JSON.stringify(history));
+        let logs = JSON.parse(localStorage.getItem("gp_logs") || "[]");
+        logs.unshift({time: new Date().toLocaleTimeString(), lat, lng: document.getElementById('lng').innerText, rem});
+        localStorage.setItem("gp_logs", JSON.stringify(logs));
         document.getElementById('remark').value = "";
         refreshLogs();
     }
 
     function refreshLogs() {
-        document.getElementById('logStream').innerHTML = history.slice(0, 8).map(h => `
-            <div style="border-bottom: 1px solid var(--border); padding: 4px 0;">
+        const logs = JSON.parse(localStorage.getItem("gp_logs") || "[]");
+        document.getElementById('logStream').innerHTML = logs.slice(0, 10).map(h => `
+            <div style="border-bottom: 1px solid var(--border); padding: 5px 0;">
                 [${h.time}] ${h.rem}<br><span style="color:var(--accent)">${h.lat}, ${h.lng}</span>
             </div>
         `).join('');
     }
 
-    function copyShareLink() {
-        const lat = document.getElementById('lat').innerText;
-        const lng = document.getElementById('lng').innerText;
-        const url = `https://www.google.com/maps?q=${lat},${lng}`;
-        navigator.clipboard.writeText(url);
-        alert("Location Link Copied.");
+    function toggleNight() {
+        const mode = document.body.getAttribute('data-theme') === 'day' ? 'night' : 'day';
+        document.body.setAttribute('data-theme', mode);
+        localStorage.setItem("gp_theme", mode);
     }
 
     function downloadData() {
-        let csv = "Time,Remark,Lat,Lng\n" + history.map(h => `${h.time},${h.rem},${h.lat},${h.lng}`).join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' });
+        const logs = JSON.parse(localStorage.getItem("gp_logs") || "[]");
+        let csv = "Time,Remark,Lat,Lng\n" + logs.map(h => `${h.time},${h.rem},${h.lat},${h.lng}`).join('\n');
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'geopulse_precision_logs.csv';
+        a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+        a.download = 'geopulse_logs.csv';
         a.click();
     }
 
-    function toggleNight() {
-        document.body.setAttribute('data-theme', document.body.getAttribute('data-theme') === 'day' ? 'night' : 'day');
+    function copyShareLink() {
+        const lat = document.getElementById('lat').innerText;
+        const lng = document.getElementById('lng').innerText;
+        navigator.clipboard.writeText(`http://maps.google.com/?q=${lat},${lng}`);
+        alert("Link Copied.");
     }
 </script>
-
 </body>
 </html>
